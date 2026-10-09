@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#23262E"/>
+      <stop offset="1" stop-color="#121419"/>
+    </linearGradient>
+    <linearGradient id="hot" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#FF6A00"/>
+      <stop offset="1" stop-color="#FFA53D"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+  <!-- gauge track (270 degrees, gap at the bottom) -->
+  <path d="M72.85 191.15 A78 78 0 1 1 183.15 191.15" fill="none" stroke="#323743" stroke-width="22" stroke-linecap="round"/>
+  <!-- gauge fill (~80%) -->
+  <path d="M72.85 191.15 A78 78 0 1 1 205.04 123.8" fill="none" stroke="url(#hot)" stroke-width="22" stroke-linecap="round"/>
+  <!-- bolt -->
+  <path d="M139 86 L103 144 H126 L116 186 L153 126 H130 Z" fill="#F4F6FA" stroke="#F4F6FA" stroke-width="6" stroke-linejoin="round"/>
+</svg>
