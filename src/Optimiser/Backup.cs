@@ -24,7 +24,23 @@ public class Backup(string stateKey = Backup.DefaultKey, bool makeRestorePoint =
     // Set when the automatic restore point before the first change couldn't be made.
     public string? RestorePointError { get; private set; }
 
+    public List<Change> Snapshot()
+    {
+        lock (Changes) return [.. Changes];
+    }
+
+    public bool Owns(string tweak)
+    {
+        lock (Changes) return Changes.Any(c => c.Tweak == tweak);
+    }
+
+    // ponytail: one lock for everything; changes are rare and quick apart from the first restore point.
     public void Set(string tweak, string key, string name, object value, RegistryValueKind kind)
+    {
+        lock (Changes) SetLocked(tweak, key, name, value, kind);
+    }
+
+    void SetLocked(string tweak, string key, string name, object value, RegistryValueKind kind)
     {
         var saved = Changes.FirstOrDefault(c => c.Key.Equals(key, StringComparison.OrdinalIgnoreCase)
                                              && c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -34,7 +50,7 @@ public class Backup(string stateKey = Backup.DefaultKey, bool makeRestorePoint =
         if (saved == null)
         {
             if (makeRestorePoint && Changes.Count == 0) RestorePointError = RestorePoint.Create("Before Optimiser changes");
-            using var current = Open(key);
+            using var current = Reg.Open(key);
             var old = current?.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
             var oldKind = old == null ? kind : current!.GetValueKind(name);
             if (oldKind == RegistryValueKind.Unknown) // e.g. REG_RESOURCE_LIST, which .NET can't write back
@@ -42,15 +58,20 @@ public class Backup(string stateKey = Backup.DefaultKey, bool makeRestorePoint =
             Changes.Add(new(tweak, key, name, oldKind, old == null ? null : Encode(old), DateTime.Now));
             Save();
         }
-        using var k = Open(key, write: true)!;
+        using var k = Reg.Open(key, write: true)!;
         k.SetValue(name, value, kind);
     }
 
     public void Undo(string tweak)
     {
+        lock (Changes) UndoLocked(tweak);
+    }
+
+    void UndoLocked(string tweak)
+    {
         foreach (var c in Changes.Where(c => c.Tweak == tweak).Reverse().ToList())
         {
-            using (var k = Open(c.Key, write: true)!)
+            using (var k = Reg.Open(c.Key, write: true)!)
             {
                 if (c.Old == null) k.DeleteValue(c.Name, throwOnMissingValue: false);
                 else k.SetValue(c.Name, Decode(c.Old, c.Kind), c.Kind);
@@ -62,31 +83,20 @@ public class Backup(string stateKey = Backup.DefaultKey, bool makeRestorePoint =
 
     public void UndoAll()
     {
-        foreach (var tweak in Changes.Select(c => c.Tweak).Distinct().Reverse().ToList()) Undo(tweak);
+        lock (Changes)
+            foreach (var tweak in Changes.Select(c => c.Tweak).Distinct().Reverse().ToList()) UndoLocked(tweak);
     }
 
     static List<Change> Load(string stateKey)
     {
-        using var k = Open(stateKey);
+        using var k = Reg.Open(stateKey);
         return k?.GetValue("Backup") is string json ? JsonSerializer.Deserialize<List<Change>>(json) ?? [] : [];
     }
 
     void Save()
     {
-        using var k = Open(stateKey, write: true)!;
+        using var k = Reg.Open(stateKey, write: true)!;
         k.SetValue("Backup", JsonSerializer.Serialize(Changes), RegistryValueKind.String); // one atomic write
-    }
-
-    static RegistryKey? Open(string key, bool write = false)
-    {
-        var split = key.IndexOf('\\');
-        var root = key[..split] switch
-        {
-            "HKEY_LOCAL_MACHINE" or "HKLM" => Registry.LocalMachine,
-            "HKEY_CURRENT_USER" or "HKCU" => Registry.CurrentUser,
-            var hive => throw new ArgumentException($"Unsupported registry hive {hive}"),
-        };
-        return write ? root.CreateSubKey(key[(split + 1)..]) : root.OpenSubKey(key[(split + 1)..]);
     }
 
     static string Encode(object value) => value switch
@@ -104,6 +114,29 @@ public class Backup(string stateKey = Backup.DefaultKey, bool makeRestorePoint =
         RegistryValueKind.Binary or RegistryValueKind.None => Convert.FromBase64String(s),
         _ => s,
     };
+}
+
+public static class Reg
+{
+    // Opens a full key path such as HKEY_LOCAL_MACHINE\SOFTWARE\X (HKLM and HKCU short forms work too).
+    // Write mode creates the key.
+    public static RegistryKey? Open(string key, bool write = false)
+    {
+        var split = key.IndexOf('\\');
+        var root = key[..split] switch
+        {
+            "HKEY_LOCAL_MACHINE" or "HKLM" => Registry.LocalMachine,
+            "HKEY_CURRENT_USER" or "HKCU" => Registry.CurrentUser,
+            var hive => throw new ArgumentException($"Unsupported registry hive {hive}"),
+        };
+        return write ? root.CreateSubKey(key[(split + 1)..]) : root.OpenSubKey(key[(split + 1)..]);
+    }
+
+    public static object? Read(string key, string name)
+    {
+        using var k = Open(key);
+        return k?.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+    }
 }
 
 public static class RestorePoint

@@ -11,6 +11,65 @@
                   UseAeroCaptionButtons="False" />
   </WindowChrome.WindowChrome>
 
+  <Window.Resources>
+    <!-- Status word for checks Optimiser can only detect -->
+    <Style x:Key="CheckStatus" TargetType="TextBlock">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,0,14,0" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding On}" Value="True">
+          <Setter Property="Foreground" Value="{StaticResource Good}" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- The right-hand controls shared by both row layouts -->
+    <DataTemplate x:Key="RowControls">
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBlock Text="{Binding Status}" Style="{StaticResource CheckStatus}"
+                   Visibility="{Binding IsCheck, Converter={StaticResource Vis}}" />
+        <Button Content="{Binding ButtonText}" Style="{StaticResource SecondaryButton}" Padding="14,6" Click="OnRowButton"
+                Visibility="{Binding HasButton, Converter={StaticResource Vis}}" />
+        <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding On, Mode=OneWay}" IsEnabled="{Binding CanSwitch}"
+                  ToolTip="{Binding SwitchTip}" Click="OnRowSwitch"
+                  Visibility="{Binding IsSwitch, Converter={StaticResource Vis}}" />
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Full card on the Optimisations page -->
+    <DataTemplate x:Key="RowCard">
+      <Border Style="{StaticResource Panel}" Padding="20,16" Margin="0,0,0,10">
+        <DockPanel>
+          <ContentPresenter DockPanel.Dock="Right" Margin="24,0,0,0" Content="{Binding}" ContentTemplate="{StaticResource RowControls}" />
+          <StackPanel>
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15" />
+              <Border Style="{StaticResource Badge}" Visibility="{Binding HasNote, Converter={StaticResource Vis}}">
+                <TextBlock Text="{Binding Note}" />
+              </Border>
+            </StackPanel>
+            <TextBlock Text="{Binding Description}" Style="{StaticResource MutedText}" FontSize="13" Margin="0,6,0,0"
+                       MaxWidth="720" HorizontalAlignment="Left" LineHeight="19" />
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </DataTemplate>
+
+    <!-- Compact line in the dashboard's recommendations -->
+    <DataTemplate x:Key="RowLine">
+      <DockPanel Margin="0,0,0,16">
+        <ContentPresenter DockPanel.Dock="Right" Margin="20,0,0,0" Content="{Binding}" ContentTemplate="{StaticResource RowControls}" />
+        <StackPanel>
+          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding Description}" Style="{StaticResource MutedText}" FontSize="12.5" Margin="0,3,0,0"
+                     TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Description}" />
+        </StackPanel>
+      </DockPanel>
+    </DataTemplate>
+  </Window.Resources>
+
   <Grid x:Name="Root">
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="72" />
@@ -33,7 +92,7 @@
       </StackPanel>
     </DockPanel>
 
-    <!-- Title bar: page name on the left, window buttons on the right; the rest drags the window -->
+    <!-- Title bar: page name and status on the left, window buttons on the right; the rest drags the window -->
     <DockPanel Grid.Column="1">
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" WindowChrome.IsHitTestVisibleInChrome="True">
         <Button Style="{StaticResource Caption}" Content="&#xE921;" ToolTip="Minimise" Click="OnMinimise" />
@@ -42,15 +101,19 @@
       </StackPanel>
       <TextBlock x:Name="PageTitle" Margin="28,0,0,0" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold"
                  Foreground="{StaticResource Accent}" />
+      <TextBlock x:Name="StatusText" Margin="24,0,16,0" VerticalAlignment="Center" FontSize="13"
+                 Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
     </DockPanel>
 
-    <Grid x:Name="Pages" Grid.Row="1" Grid.Column="1" Margin="28,12,28,28">
+    <Grid x:Name="Pages" Grid.Row="1" Grid.Column="1" Margin="28,12,28,0">
 
       <ScrollViewer x:Name="Dashboard" VerticalScrollBarVisibility="Auto">
-        <StackPanel>
-          <StackPanel Orientation="Horizontal" Margin="0,4,0,32">
+        <StackPanel Margin="0,0,0,28">
+          <StackPanel Orientation="Horizontal" Margin="0,4,0,28">
             <Grid Width="148" Height="148">
               <Path Data="M 26.62,121.38 A 67,67 0 1 1 121.38,121.38" Stroke="{StaticResource Line}" StrokeThickness="14"
+                    StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+              <Path x:Name="ScoreArc" Stroke="{StaticResource Accent}" StrokeThickness="14"
                     StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
               <TextBlock Text="&#xE945;" FontFamily="{StaticResource Icons}" FontSize="44" Foreground="{StaticResource Accent}"
                          HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -58,6 +121,8 @@
             <StackPanel VerticalAlignment="Center" Margin="32,0,0,0">
               <TextBlock x:Name="Headline" Text="Scanning your PC" FontSize="34" FontWeight="SemiBold" />
               <TextBlock x:Name="Subline" Style="{StaticResource MutedText}" MaxWidth="560" Margin="0,8,0,0" FontSize="15" />
+              <TextBlock x:Name="Notice" Foreground="{StaticResource Accent}" TextWrapping="Wrap" MaxWidth="560" Margin="0,8,0,0"
+                         Visibility="Collapsed" />
             </StackPanel>
           </StackPanel>
 
@@ -68,40 +133,27 @@
               <ColumnDefinition Width="2*" />
             </Grid.ColumnDefinitions>
 
-            <Border Style="{StaticResource Panel}">
+            <Border Style="{StaticResource Panel}" VerticalAlignment="Top">
               <StackPanel>
-                <TextBlock Text="Your PC" Style="{StaticResource PanelTitle}" />
-                <Grid x:Name="Specs">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="104" />
-                    <ColumnDefinition />
-                  </Grid.ColumnDefinitions>
-                  <Grid.RowDefinitions>
-                    <RowDefinition />
-                    <RowDefinition />
-                    <RowDefinition />
-                    <RowDefinition />
-                  </Grid.RowDefinitions>
-                  <TextBlock Text="Processor" Style="{StaticResource MutedText}" Margin="0,0,0,16" />
-                  <StackPanel Grid.Column="1" Margin="0,0,0,16">
-                    <TextBlock x:Name="CpuName" TextWrapping="Wrap" />
-                    <TextBlock x:Name="CpuCores" Style="{StaticResource MutedText}" FontSize="13" Margin="0,3,0,0" />
-                  </StackPanel>
-                  <TextBlock Grid.Row="1" Text="Graphics" Style="{StaticResource MutedText}" Margin="0,0,0,16" />
-                  <TextBlock Grid.Row="1" Grid.Column="1" x:Name="GpuNames" TextWrapping="Wrap" LineHeight="22" Margin="0,0,0,16" />
-                  <TextBlock Grid.Row="2" Text="Memory" Style="{StaticResource MutedText}" Margin="0,0,0,16" />
-                  <TextBlock Grid.Row="2" Grid.Column="1" x:Name="Ram" Margin="0,0,0,16" />
-                  <TextBlock Grid.Row="3" Text="Machine" Style="{StaticResource MutedText}" />
-                  <TextBlock Grid.Row="3" Grid.Column="1" x:Name="Machine" TextWrapping="Wrap" />
-                </Grid>
+                <TextBlock Text="Recommended for you" Style="{StaticResource PanelTitle}" />
+                <ItemsControl x:Name="Recommended" ItemTemplate="{StaticResource RowLine}" />
+                <TextBlock x:Name="AllDone" Style="{StaticResource MutedText}" Visibility="Collapsed" Margin="0,0,0,8"
+                           Text="Everything Optimiser recommends for this PC is on." />
+                <Button x:Name="ApplyAllButton" Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Margin="0,4,0,0"
+                        Content="Apply all recommended" Click="OnApplyAll" />
               </StackPanel>
             </Border>
 
-            <Border Grid.Column="2" Style="{StaticResource Panel}">
+            <Border Grid.Column="2" Style="{StaticResource Panel}" VerticalAlignment="Top">
               <StackPanel>
-                <TextBlock Text="Tuned for this PC" Style="{StaticResource PanelTitle}" />
-                <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="0,0,0,16"
-                           Text="Optimiser only offers the tweaks that fit the hardware it found." />
+                <TextBlock Text="Your PC" Style="{StaticResource PanelTitle}" />
+                <TextBlock x:Name="CpuName" TextWrapping="Wrap" />
+                <TextBlock x:Name="CpuCores" Style="{StaticResource MutedText}" FontSize="13" Margin="0,3,0,14" />
+                <TextBlock x:Name="GpuNames" TextWrapping="Wrap" LineHeight="21" />
+                <TextBlock x:Name="Ram" Margin="0,14,0,0" />
+                <TextBlock x:Name="Machine" TextWrapping="Wrap" Margin="0,14,0,0" />
+                <Border Height="1" Background="{StaticResource Line}" Margin="0,18,0,16" />
+                <TextBlock Text="Tuned for this PC" FontWeight="SemiBold" Margin="0,0,0,12" />
                 <StackPanel x:Name="Features" />
               </StackPanel>
             </Border>
@@ -109,10 +161,13 @@
         </StackPanel>
       </ScrollViewer>
 
-      <StackPanel x:Name="Optimisations" Visibility="Collapsed" MaxWidth="640" HorizontalAlignment="Left">
-        <TextBlock Style="{StaticResource MutedText}" FontSize="15"
-                   Text="The tweaks arrive in step 2. Each one gets its own switch here, and only the ones that fit this PC are shown." />
-      </StackPanel>
+      <ScrollViewer x:Name="Optimisations" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,0,0,28">
+          <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left"
+                     Text="Only the optimisations that fit this PC are shown. Every switch saves the original setting first, so turning it off puts things back exactly as they were." />
+          <StackPanel x:Name="Groups" />
+        </StackPanel>
+      </ScrollViewer>
 
       <StackPanel x:Name="Games" Visibility="Collapsed" MaxWidth="640" HorizontalAlignment="Left">
         <TextBlock Style="{StaticResource MutedText}" FontSize="15"
@@ -126,30 +181,28 @@
 
       <DockPanel x:Name="Backups" Visibility="Collapsed">
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,20">
-          <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="640" HorizontalAlignment="Left"
+          <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left"
                      Text="Optimiser saves every setting before it changes it, so you can put things back one at a time or all at once. A Windows restore point is also made before the first change." />
           <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
             <Button x:Name="UndoAllButton" Style="{StaticResource AccentButton}" Content="Undo all changes" Click="OnUndoAll" />
             <Button Style="{StaticResource SecondaryButton}" Content="Create restore point" Margin="10,0,0,0" Click="OnRestorePoint" />
           </StackPanel>
-          <TextBlock x:Name="BackupStatus" Style="{StaticResource MutedText}" Margin="0,14,0,0" />
         </StackPanel>
         <Grid>
           <TextBlock x:Name="NoChanges" Style="{StaticResource MutedText}"
-                     Text="Nothing has been changed yet. When you switch on an optimisation, its original setting appears here." />
+                     Text="Nothing has been changed yet. When you switch on an optimisation, its original settings are saved here." />
           <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <ItemsControl x:Name="ChangeList">
+            <ItemsControl x:Name="ChangeList" Margin="0,0,0,28">
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                  <Border Style="{StaticResource Panel}" Padding="18,14" Margin="0,0,0,8">
+                  <Border Style="{StaticResource Panel}" Padding="20,14" Margin="0,0,0,8">
                     <DockPanel>
-                      <TextBlock DockPanel.Dock="Right" Style="{StaticResource MutedText}" FontSize="13"
-                                 Text="{Binding At, Mode=OneWay, StringFormat='{}{0:d MMM, HH:mm}'}" />
+                      <Button DockPanel.Dock="Right" Style="{StaticResource SecondaryButton}" Padding="14,6" Margin="20,0,0,0"
+                              VerticalAlignment="Center" Content="Undo" Click="OnUndoOne" />
                       <StackPanel>
-                        <TextBlock Text="{Binding Tweak, Mode=OneWay}" FontWeight="SemiBold" />
-                        <TextBlock Style="{StaticResource MutedText}" FontSize="12.5" Margin="0,4,0,0">
-                          <Run Text="{Binding Key, Mode=OneWay}" />\<Run Text="{Binding Name, Mode=OneWay}" />
-                        </TextBlock>
+                        <TextBlock Text="{Binding Tweak}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Detail}" Style="{StaticResource MutedText}" FontSize="12.5" Margin="0,4,0,0"
+                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                       </StackPanel>
                     </DockPanel>
                   </Border>

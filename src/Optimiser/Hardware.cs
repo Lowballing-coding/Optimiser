@@ -8,6 +8,10 @@ public record Hardware(string Cpu, int PCores, int ECores, int Threads, string[]
                        string Maker, string Model, bool IsLaptop)
 {
     public bool HasNvidia => Gpus.Any(g => g.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase));
+    public bool HasDedicatedGpu => HasNvidia || Gpus.Any(g => g.Contains("Radeon RX", StringComparison.OrdinalIgnoreCase));
+    // Intel graphics, or AMD's built-in "Radeon Graphics". MSI laptops hide it in Discrete Graphics Mode.
+    public bool HasIntegratedGpu => Gpus.Any(g => g.Contains("Intel", StringComparison.OrdinalIgnoreCase)
+        || (g.Contains("Radeon", StringComparison.OrdinalIgnoreCase) && !g.Contains("RX", StringComparison.Ordinal)));
     public bool IsHybridCpu => ECores > 0;
     public bool IsMsi => Maker.Contains("Micro-Star", StringComparison.OrdinalIgnoreCase)
                       || Maker.StartsWith("MSI", StringComparison.OrdinalIgnoreCase);

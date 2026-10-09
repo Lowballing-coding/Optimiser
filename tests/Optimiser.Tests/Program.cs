@@ -43,6 +43,31 @@ using (var k = Registry.CurrentUser.OpenSubKey(sub)!)
 }
 Check(new Backup(state, makeRestorePoint: false).Changes.Count == 0, "empty after undo all");
 
+// A registry tweak: on means every value matches, off puts back the original.
+backup = new Backup(state, makeRestorePoint: false);
+using (var k = Registry.CurrentUser.CreateSubKey(sub)) k.SetValue("Mode", 0, RegistryValueKind.DWord);
+var tweak = Tweaks.RegistryTweak(backup, "Test tweak", "Group", "Description", [(key, "Mode", 1), (key, "Text", "on")]);
+Check(!tweak.IsOn(), "tweak starts off");
+tweak.TurnOn!();
+Check(tweak.IsOn() && backup.Owns("Test tweak"), "tweak turns on and is recorded");
+tweak.TurnOff!();
+Check(!tweak.IsOn() && Read("Mode") is 0 && Read("Text") is null && !backup.Owns("Test tweak"), "tweak turns off cleanly");
+
+// Optimiser's own settings.
+Settings.Key = key + @"\Settings";
+Check(Settings.Get("Missing", true) && !Settings.Get("Missing", false), "settings fall back to the default");
+Settings.Set("Flag", false);
+Settings.SetList("Folders", [@"D:\Games\A", @"E:\B"]);
+Check(!Settings.Get("Flag", true) && Settings.GetList("Folders").Length == 2, "settings round-trip");
+
+// GPU type flags.
+Hardware Fake(params string[] gpus) => new("cpu", 6, 8, 20, gpus, 32, "Micro-Star International Co., Ltd.", "GE66", true);
+Check(Fake("NVIDIA GeForce RTX 3070 Ti Laptop GPU", "Intel(R) Iris(R) Xe Graphics") is { HasIntegratedGpu: true, HasDedicatedGpu: true, IsMsi: true },
+      "hybrid graphics detected");
+Check(Fake("NVIDIA GeForce RTX 3070 Ti Laptop GPU") is { HasIntegratedGpu: false }, "discrete graphics mode detected");
+Check(Fake("AMD Radeon(TM) Graphics", "AMD Radeon RX 6800M") is { HasIntegratedGpu: true, HasDedicatedGpu: true, HasNvidia: false },
+      "AMD integrated and dedicated told apart");
+
 var hw = Hardware.Detect();
 Console.WriteLine(hw);
 Check(hw.Cpu != "Unknown" && hw.PCores > 0 && hw.RamGb > 0 && hw.Gpus.Length > 0, "hardware detected");

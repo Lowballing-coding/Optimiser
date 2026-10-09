@@ -14,6 +14,8 @@
     <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
     <FontFamily x:Key="Ui">Segoe UI Variable Text, Segoe UI</FontFamily>
 
+    <BooleanToVisibilityConverter x:Key="Vis" />
+
     <Style x:Key="MutedText" TargetType="TextBlock">
       <Setter Property="Foreground" Value="{StaticResource Muted}" />
       <Setter Property="TextWrapping" Value="Wrap" />
@@ -102,6 +104,54 @@
           <Setter Property="Foreground" Value="White" />
         </Trigger>
       </Style.Triggers>
+    </Style>
+
+    <!-- On/off switch for a tweak -->
+    <Style x:Key="Switch" TargetType="CheckBox">
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="CheckBox">
+            <Border x:Name="Track" Width="44" Height="24" CornerRadius="12" Background="{StaticResource Line}"
+                    BorderBrush="Transparent" BorderThickness="1">
+              <Ellipse x:Name="Knob" Width="16" Height="16" Margin="4,0" HorizontalAlignment="Left" Fill="{StaticResource Muted}" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Track" Property="Background" Value="{StaticResource Accent}" />
+                <Setter TargetName="Knob" Property="Fill" Value="{StaticResource Bg}" />
+                <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource Text}" />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="Track" Property="Opacity" Value="0.45" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Small pill next to a title, e.g. "Needs a restart" -->
+    <Style x:Key="Badge" TargetType="Border">
+      <Setter Property="Background" Value="{StaticResource Line}" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="7,2" />
+      <Setter Property="Margin" Value="10,0,0,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextElement.FontSize" Value="11.5" />
+      <Setter Property="TextElement.Foreground" Value="{StaticResource Muted}" />
+    </Style>
+
+    <Style x:Key="GroupTitle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="Margin" Value="2,18,0,10" />
     </Style>
 
     <!-- Sidebar page buttons: an icon glyph as content, accent bar when selected -->
