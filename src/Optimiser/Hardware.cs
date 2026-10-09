@@ -15,7 +15,7 @@ public record Hardware(string Cpu, int PCores, int ECores, int Threads, string[]
     public static Hardware Detect()
     {
         var installed = All("Win32_PhysicalMemory", "Capacity").Sum(long.Parse);
-        if (installed == 0) installed = long.Parse(First("Win32_ComputerSystem", "TotalPhysicalMemory"));
+        if (installed == 0) installed = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
         var (p, e) = CoreCounts();
         return new(
             Cpu: First("Win32_Processor", "Name"),
@@ -24,7 +24,15 @@ public record Hardware(string Cpu, int PCores, int ECores, int Threads, string[]
             RamGb: Math.Round(installed / (double)(1L << 30)),
             Maker: First("Win32_ComputerSystem", "Manufacturer"),
             Model: First("Win32_ComputerSystem", "Model"),
-            IsLaptop: All("Win32_Battery", "Name").Length > 0);
+            IsLaptop: IsPortable());
+    }
+
+    // Uses the chassis type, not "has a battery", because desktops on a USB UPS report a battery too.
+    static bool IsPortable()
+    {
+        using var search = new ManagementObjectSearcher("SELECT ChassisTypes FROM Win32_SystemEnclosure");
+        return search.Get().Cast<ManagementBaseObject>()
+            .Any(o => o["ChassisTypes"] is ushort[] types && types.Any(t => t is 8 or 9 or 10 or 14 or 30 or 31 or 32));
     }
 
     static string[] All(string wmiClass, string property)

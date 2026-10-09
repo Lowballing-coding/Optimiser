@@ -22,6 +22,8 @@ backup.Set("Tweak A", key, "New", "hello", RegistryValueKind.String);
 backup.Set("Tweak B", key, "Path", @"C:\y", RegistryValueKind.String); // different type than before
 backup.Set("Tweak B", key, "Lines", new[] { "c" }, RegistryValueKind.MultiString);
 Check(Read("Existing") is 2, "tweak value written");
+Check(Throws(() => backup.Set("Tweak C", key.ToUpperInvariant(), "existing", 3, RegistryValueKind.DWord)),
+      "a second tweak can't take over a setting another tweak owns");
 
 backup = new Backup(state, makeRestorePoint: false); // as if the app restarted
 Check(backup.Changes.Count == 4, "backup survives a restart");
@@ -47,6 +49,12 @@ Check(hw.Cpu != "Unknown" && hw.PCores > 0 && hw.RamGb > 0 && hw.Gpus.Length > 0
 
 Registry.CurrentUser.DeleteSubKeyTree(sub);
 Console.WriteLine("All checks passed");
+
+static bool Throws(Action action)
+{
+    try { action(); return false; }
+    catch (InvalidOperationException) { return true; }
+}
 
 static object? Read(string name) => Registry.GetValue(key, name, null);
 

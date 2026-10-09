@@ -26,12 +26,19 @@ public class Backup(string stateKey = Backup.DefaultKey, bool makeRestorePoint =
 
     public void Set(string tweak, string key, string name, object value, RegistryValueKind kind)
     {
-        if (!Changes.Any(c => c.Key == key && c.Name == name))
+        var saved = Changes.FirstOrDefault(c => c.Key.Equals(key, StringComparison.OrdinalIgnoreCase)
+                                             && c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        // Two tweaks sharing one setting couldn't be undone independently, so that's a bug in the tweak list.
+        if (saved != null && saved.Tweak != tweak)
+            throw new InvalidOperationException($"{key}\\{name} is already changed by \"{saved.Tweak}\".");
+        if (saved == null)
         {
             if (makeRestorePoint && Changes.Count == 0) RestorePointError = RestorePoint.Create("Before Optimiser changes");
             using var current = Open(key);
             var old = current?.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
             var oldKind = old == null ? kind : current!.GetValueKind(name);
+            if (oldKind == RegistryValueKind.Unknown) // e.g. REG_RESOURCE_LIST, which .NET can't write back
+                throw new InvalidOperationException($"{key}\\{name} has a type Optimiser can't restore, so it won't change it.");
             Changes.Add(new(tweak, key, name, oldKind, old == null ? null : Encode(old), DateTime.Now));
             Save();
         }
