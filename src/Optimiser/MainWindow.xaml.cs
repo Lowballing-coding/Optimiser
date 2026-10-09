@@ -106,6 +106,7 @@ public partial class MainWindow : Window
     // Re-reads the real state of every optimisation and redraws everything that depends on it.
     void Refresh()
     {
+        ShowChanges();
         if (App.Hardware == null) return;
         var rows = Tweaks.All(App.Backup).Where(o => o.AppliesTo(App.Hardware)).Select(ToRow).ToList();
 
@@ -119,7 +120,9 @@ public partial class MainWindow : Window
         DrawScore(score / 100.0);
 
         var notices = new List<string>();
-        if (App.RestartNeeded.Count > 0) notices.Add($"Restart your PC to finish changing {string.Join(" and ", App.RestartNeeded)}.");
+        List<string> restart;
+        lock (App.RestartNeeded) restart = [.. App.RestartNeeded];
+        if (restart.Count > 0) notices.Add($"Restart your PC to finish changing {string.Join(" and ", restart)}.");
         if (App.Hardware.IsLaptop && SystemParameters.PowerLineStatus == PowerLineStatus.Offline)
             notices.Add("You're on battery, so the GPU is held back. Plug in for full performance.");
         Notice.Text = string.Join("\n", notices);
@@ -135,15 +138,16 @@ public partial class MainWindow : Window
             Groups.Children.Add(new TextBlock { Text = group.Key, Style = (Style)FindResource("GroupTitle") });
             Groups.Children.Add(new ItemsControl { ItemsSource = group.ToList(), ItemTemplate = (DataTemplate)FindResource("RowCard") });
         }
-        ShowChanges();
     }
 
     static Row ToRow(Optimisation o)
     {
         var on = o.IsOn();
         var alreadyInWindows = o.UsesBackup && on && !App.Backup.Owns(o.Name);
+        bool changedThisSession;
+        lock (App.RestartNeeded) changedThisSession = App.RestartNeeded.Contains(o.Name);
         var note = alreadyInWindows ? "Already on in Windows"
-                 : o.NeedsRestart && App.RestartNeeded.Contains(o.Name) ? "Restart to finish"
+                 : o.NeedsRestart && changedThisSession ? "Restart to finish"
                  : o.NeedsRestart ? "Needs a restart"
                  : null;
         return new Row(o, on, o.TurnOn != null && !alreadyInWindows, note);
@@ -164,7 +168,11 @@ public partial class MainWindow : Window
     // Runs a change off the UI thread (restore points and services can take a while), then redraws.
     async Task<bool> Change(string doing, Action action, string done)
     {
-        if (busy) return false;
+        if (busy)
+        {
+            Refresh(); // puts back a switch the user flicked while another change was running
+            return false;
+        }
         busy = true;
         StatusText.Text = doing;
         var firstChange = App.Backup.Snapshot().Count == 0;
@@ -173,7 +181,7 @@ public partial class MainWindow : Window
         {
             await Task.Run(action);
             StatusText.Text = done;
-            if (firstChange && App.Backup.RestorePointError is { } error)
+            if (firstChange && App.Backup.Snapshot().Count > 0 && App.Backup.RestorePointError is { } error)
                 StatusText.Text += $" No restore point was made ({error}), but the original settings are saved on the Backups page.";
         }
         catch (Exception ex)
@@ -186,15 +194,19 @@ public partial class MainWindow : Window
         return ok;
     }
 
+    // Runs on a worker thread. The one place a tweak is switched, so no path forgets the restart notice.
+    static void Flip(Optimisation o, bool on)
+    {
+        (on ? o.TurnOn! : o.TurnOff!)();
+        if (o.NeedsRestart) lock (App.RestartNeeded) App.RestartNeeded.Add(o.Name);
+    }
+
     async void OnRowSwitch(object sender, RoutedEventArgs e)
     {
         var box = (CheckBox)sender;
         var o = ((Row)box.DataContext).Item;
-        var ok = box.IsChecked == true
-            ? await Change($"Turning on {o.Name}…", o.TurnOn!, $"Turned on {o.Name}.")
-            : await Change($"Turning off {o.Name}…", o.TurnOff!, $"Turned off {o.Name} and put back the original setting.");
-        if (ok && o.NeedsRestart) App.RestartNeeded.Add(o.Name);
-        Refresh(); // also snaps the switch back if the change failed or was ignored while busy
+        if (box.IsChecked == true) await Change($"Turning on {o.Name}…", () => Flip(o, true), $"Turned on {o.Name}.");
+        else await Change($"Turning off {o.Name}…", () => Flip(o, false), $"Turned off {o.Name} and put back the original setting.");
     }
 
     async void OnRowButton(object sender, RoutedEventArgs e)
@@ -208,18 +220,15 @@ public partial class MainWindow : Window
         var todo = Tweaks.All(App.Backup)
             .Where(o => o.AppliesTo(App.Hardware) && o.CountsToScore && o.TurnOn != null && !o.IsOn()).ToList();
         var failed = new List<string>();
-        var applied = new List<Optimisation>();
         await Change($"Applying {todo.Count} optimisations…", () =>
         {
             foreach (var o in todo)
             {
-                try { o.TurnOn!(); applied.Add(o); }
+                try { Flip(o, true); }
                 catch (Exception ex) { failed.Add($"{o.Name} ({ex.Message})"); }
             }
         }, $"Applied {todo.Count} optimisations.");
-        foreach (var o in applied.Where(o => o.NeedsRestart)) App.RestartNeeded.Add(o.Name);
-        if (failed.Count > 0) StatusText.Text = $"Some couldn't be applied: {string.Join(", ", failed)}.";
-        Refresh();
+        if (failed.Count > 0) StatusText.Text += $" Some couldn't be applied: {string.Join(", ", failed)}.";
     }
 
     void OnNav(object sender, RoutedEventArgs e)
@@ -245,24 +254,34 @@ public partial class MainWindow : Window
     }
 
     // Undo goes through each tweak's own "off", so side effects like restarting a service happen too.
-    static Action TurnOffFor(string tweak) =>
-        Tweaks.All(App.Backup).FirstOrDefault(o => o.Name == tweak)?.TurnOff ?? (() => App.Backup.Undo(tweak));
+    // A tweak no longer in the catalogue (say, from an older version) is put back straight from the backup.
+    static void Undo(string tweak)
+    {
+        var o = Tweaks.All(App.Backup).FirstOrDefault(o => o.Name == tweak && o.TurnOff != null);
+        if (o != null) Flip(o, false);
+        else App.Backup.Undo(tweak);
+    }
 
     async void OnUndoOne(object sender, RoutedEventArgs e)
     {
         var tweak = ((BackupGroup)((FrameworkElement)sender).DataContext).Tweak;
-        if (await Change($"Undoing {tweak}…", TurnOffFor(tweak), $"Put back the original settings for {tweak}.")
-            && Tweaks.All(App.Backup).Any(o => o.Name == tweak && o.NeedsRestart))
-            App.RestartNeeded.Add(tweak);
-        Refresh();
+        await Change($"Undoing {tweak}…", () => Undo(tweak), $"Put back the original settings for {tweak}.");
     }
 
     async void OnUndoAll(object sender, RoutedEventArgs e)
     {
         var tweaks = App.Backup.Snapshot().Select(c => c.Tweak).Distinct().Reverse().ToList();
-        await Change("Undoing everything…", () => { foreach (var t in tweaks) TurnOffFor(t)(); },
-            $"Put back the original settings for {tweaks.Count} optimisation{(tweaks.Count == 1 ? "" : "s")}. "
-            + "Some only take effect after a restart.");
+        var failed = new List<string>();
+        await Change("Undoing everything…", () =>
+        {
+            foreach (var t in tweaks)
+            {
+                try { Undo(t); }
+                catch (Exception ex) { failed.Add($"{t} ({ex.Message})"); }
+            }
+        }, $"Put back the original settings for {tweaks.Count - failed.Count} optimisation{(tweaks.Count == 1 ? "" : "s")}. "
+           + "Some only take effect after a restart.");
+        if (failed.Count > 0) StatusText.Text += $" These are still changed: {string.Join(", ", failed)}.";
     }
 
     async void OnRestorePoint(object sender, RoutedEventArgs e)

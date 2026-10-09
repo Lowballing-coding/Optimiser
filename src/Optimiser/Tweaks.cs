@@ -37,7 +37,7 @@ public static class Tweaks
             Description = "Connects the laptop screen straight to the RTX GPU instead of passing every frame through the "
                         + "Intel graphics, which is often 5 to 15% more FPS on the built-in screen. Switch it under GPU Switch "
                         + "in MSI Center; it needs a restart. Battery life is shorter in this mode.",
-            AppliesTo = hw => hw.IsMsi && hw.HasNvidia,
+            AppliesTo = hw => hw.IsMsi && hw.IsLaptop && hw.HasNvidia,
             IsOn = () => !App.Hardware.HasIntegratedGpu, // in this mode Windows no longer sees the Intel GPU
             ButtonText = "Open MSI Center",
             Button = OpenMsiCenter,
@@ -129,7 +129,7 @@ public static class Tweaks
         using var p = Process.Start(new ProcessStartInfo("powershell.exe",
             $"-NoProfile -EncodedCommand {Convert.ToBase64String(Encoding.Unicode.GetBytes(script))}")
             { CreateNoWindow = true, UseShellExecute = false })!;
-        p.WaitForExit(15000);
+        if (!p.WaitForExit(15000)) return; // still starting; it'll open MSI Center when it gets there
         if (p.ExitCode != 0)
             Process.Start(new ProcessStartInfo("ms-windows-store://search/?query=MSI%20Center") { UseShellExecute = true });
     }

@@ -67,6 +67,7 @@ Check(Fake("NVIDIA GeForce RTX 3070 Ti Laptop GPU", "Intel(R) Iris(R) Xe Graphic
 Check(Fake("NVIDIA GeForce RTX 3070 Ti Laptop GPU") is { HasIntegratedGpu: false }, "discrete graphics mode detected");
 Check(Fake("AMD Radeon(TM) Graphics", "AMD Radeon RX 6800M") is { HasIntegratedGpu: true, HasDedicatedGpu: true, HasNvidia: false },
       "AMD integrated and dedicated told apart");
+Check(Fake("Intel(R) Arc(TM) A770 Graphics") is { HasDedicatedGpu: true, HasIntegratedGpu: false }, "Intel Arc card is dedicated");
 
 var hw = Hardware.Detect();
 Console.WriteLine(hw);
