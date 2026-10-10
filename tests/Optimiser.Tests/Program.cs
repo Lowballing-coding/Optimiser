@@ -143,9 +143,41 @@ using (var watcher = new GameWatcher(backup) { Games = [new Game("Fake Game", ga
     Check(game.PriorityClass == ProcessPriorityClass.High, "the game gets high priority");
     game.Kill(entireProcessTree: true);
     game.WaitForExit();
-    Check(changed.WaitOne(15000) && watcher.Running.Count == 0 && Settings.GetText(GameWatcher.SavedPowerMode) == null,
+    Check(changed.WaitOne(15000) && watcher.Running.Count == 0 && !watcher.ProfileOn && Settings.GetText(GameWatcher.SavedPowerMode) == null,
           "the profile switches off and the power mode goes back when the game closes");
+
+    using var again = Process.Start(new ProcessStartInfo(fakeGame, "/c ping -n 30 127.0.0.1") { CreateNoWindow = true, UseShellExecute = false })!;
+    Check(changed.WaitOne(15000) && watcher.ProfileOn, "the profile switches on for the game again");
+    watcher.Games = [];
+    Check(watcher.Running.Count == 0 && !watcher.ProfileOn, "taking a game off the list switches its profile off straight away");
+    again.Kill(entireProcessTree: true);
+    again.WaitForExit();
+
+    watcher.Mode = ProfileMode.On;
+    Check(watcher.ProfileOn, "On switches the profile on with no game running");
+    watcher.Mode = ProfileMode.Off;
+    Check(!watcher.ProfileOn && Settings.GetText(GameWatcher.SavedPowerMode) == null, "Off switches it off and puts the power mode back");
+    watcher.Games = [new Game("Fake Game", gameDir, Games.AddedByYou)];
+    using var ignored = Process.Start(new ProcessStartInfo(fakeGame, "/c ping -n 30 127.0.0.1") { CreateNoWindow = true, UseShellExecute = false })!;
+    Thread.Sleep(3000);
+    Check(watcher.Running.Count == 0 && !watcher.ProfileOn, "Off ignores games");
+    watcher.Mode = ProfileMode.Automatic;
+    Check(watcher.Running.SequenceEqual(["Fake Game"]) && watcher.ProfileOn, "back to Automatic picks up a game that's already running");
+    ignored.Kill(entireProcessTree: true);
+    ignored.WaitForExit();
 }
+
+// Modes saved by older versions, and each game's own switch.
+Settings.SetText(GameWatcher.ModeSetting, null);
+Settings.Set(GameWatcher.OldEnabledSetting, false);
+Check(GameWatcher.SavedMode == ProfileMode.Off, "an older version's paused profile becomes Off");
+Settings.SetText(GameWatcher.ModeSetting, "On");
+Check(GameWatcher.SavedMode == ProfileMode.On, "the chosen mode is remembered");
+var hades = new Game("Hades", @"C:\Games\Hades", "Steam");
+Games.SetProfile(hades, false);
+Check(!Games.ProfileOn(hades) && Games.ProfileOn(hades with { Folder = @"C:\Games\Other" }), "a game's profile can be switched off on its own");
+Games.SetProfile(hades, true);
+Check(Games.ProfileOn(hades), "and back on");
 
 // The per-game GPU setting keeps Windows' other options in the same value, and undo puts it back.
 const string gpuKey = @"Software\Microsoft\DirectX\UserGpuPreferences";
@@ -159,8 +191,14 @@ using (var k = Registry.CurrentUser.OpenSubKey(gpuKey, writable: true)!) k.Delet
 // Start with Windows: a copy of the app somewhere only admins can change, started by a logon task.
 AutoStart.TaskName = "OptimiserSelfTest";
 AutoStart.InstallFolder = Path.Combine(temp, "Installed");
-AutoStart.TurnOn(fakeGame);
+var unversioned = Path.Combine(temp, "Unversioned.exe");
+File.WriteAllText(unversioned, "an older build");
+AutoStart.TurnOn(unversioned);
 Check(AutoStart.IsOn() && File.Exists(AutoStart.InstalledExe), "start with Windows installs a copy and adds the task");
+AutoStart.TurnOn(fakeGame);
+Check(new FileInfo(AutoStart.InstalledExe).Length == new FileInfo(fakeGame).Length, "a newer copy replaces the installed one");
+AutoStart.TurnOn(unversioned);
+Check(new FileInfo(AutoStart.InstalledExe).Length == new FileInfo(fakeGame).Length, "an older copy doesn't roll it back");
 AutoStart.TurnOff();
 Check(!AutoStart.IsOn() && !Directory.Exists(AutoStart.InstallFolder), "turning it off removes both");
 

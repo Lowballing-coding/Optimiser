@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security;
@@ -27,10 +28,11 @@ public static class AutoStart
         catch (Exception e) when (e is FileNotFoundException or COMException) { return false; } // COM's "not found" arrives as FileNotFound
     }
 
-    // Also run on every start while it's on, so a newer download replaces the installed copy.
+    // Also run on every start while it's on, so a newer download replaces the installed copy. An older one (say,
+    // started from an old taskbar pin) leaves it alone rather than rolling it back.
     public static void TurnOn(string exe)
     {
-        if (!IsInstalled(exe))
+        if (!IsInstalled(exe) && !(File.Exists(InstalledExe) && VersionOf(InstalledExe) > VersionOf(exe)))
         {
             Directory.CreateDirectory(InstallFolder);
             for (var i = 0; ; i++)
@@ -74,6 +76,12 @@ public static class AutoStart
             Directory.Delete(InstallFolder); // only if empty
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // it's the copy that's running
+    }
+
+    static Version VersionOf(string exe)
+    {
+        var info = FileVersionInfo.GetVersionInfo(exe);
+        return new(info.FileMajorPart, info.FileMinorPart, info.FileBuildPart, info.FilePrivatePart);
     }
 
     public static bool IsInstalled(string exe) => string.Equals(Path.GetFullPath(exe), InstalledExe, StringComparison.OrdinalIgnoreCase);

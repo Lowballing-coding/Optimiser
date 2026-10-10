@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
@@ -29,13 +30,18 @@ public record Row(Optimisation Item, bool On, bool CanSwitch, string? Note)
 // One tweak's saved originals on the Backups page.
 public record BackupGroup(string Tweak, string Detail);
 
-public record GameRow(Game Game, bool Running);
+public record GameRow(Game Game, bool Running, bool ProfileOn)
+{
+    public string ProfileTip => ProfileOn ? "The gaming profile switches on while this game runs. Turn off to leave this game out."
+                                          : "Turn on to switch on the gaming profile while this game runs.";
+}
 
 public partial class MainWindow : Window
 {
     public const double SidebarOpen = 200; // sidebar width while hovered; 72 when closed
     const string PlacementSetting = "WindowPlacement";
     bool busy, toldAboutTray;
+    readonly List<RadioButton> modeButtons = [];
     Stats? stats;
     readonly DispatcherTimer statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     readonly StatTile gpuTemp = new("GPU temperature", showTrend: true), gpuLoad = new("GPU load", showTrend: true),
@@ -48,6 +54,12 @@ public partial class MainWindow : Window
         ((RadioButton)Nav.Children[0]).IsChecked = true;
         StateChanged += (_, _) => ShowState();
         RestorePlacement();
+        SourceInitialized += (_, _) =>
+        {
+            // A pin made from the window starts this copy. Updates replace it in place, so the pin keeps working.
+            try { Taskbar.SetIdentity(new WindowInteropHelper(this).Handle, Environment.ProcessPath!); }
+            catch { } // only changes how the taskbar groups the window
+        };
         Loaded += OnLoaded;
         Closed += (_, _) => stats?.Dispose();
         Closing += (_, e) =>
@@ -60,6 +72,8 @@ public partial class MainWindow : Window
             if (!toldAboutTray) App.Notify("Optimiser is still running here and switches to the gaming profile when a game starts. Right-click to exit.");
             toldAboutTray = true;
         };
+        DashMode.Content = ModePicker();
+        SettingsMode.Content = ModePicker();
         App.GamesChanged += ShowGames;
         App.UpdateChanged += () => ShowUpdate(App.Update);
         ShowUpdate(null);
@@ -131,7 +145,7 @@ public partial class MainWindow : Window
         ShowChanges();
         var settings = Tweaks.AppSettings().Select(ToRow).ToList();
         UpdateSettings.ItemsSource = settings.Where(r => r.Item.Group == Tweaks.UpdatesGroup).ToList();
-        AddGroups(SettingGroups, settings.Where(r => r.Item.Group != Tweaks.UpdatesGroup));
+        ProfileSettings.ItemsSource = settings.Where(r => r.Item.Group != Tweaks.UpdatesGroup).ToList();
         if (App.Hardware == null) return;
         var rows = Tweaks.All(App.Backup).Where(o => o.AppliesTo(App.Hardware)).Select(ToRow).ToList();
 
@@ -157,18 +171,13 @@ public partial class MainWindow : Window
         AllDone.Visibility = left.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         ApplyAllButton.Visibility = left.Any(r => r.IsSwitch) ? Visibility.Visible : Visibility.Collapsed;
 
-        AddGroups(Groups, rows);
-        ShowGames(); // the background and gaming profile switches change what the Games page says
-    }
-
-    void AddGroups(Panel panel, IEnumerable<Row> rows)
-    {
-        panel.Children.Clear();
+        Groups.Children.Clear();
         foreach (var group in rows.GroupBy(r => r.Item.Group))
         {
-            panel.Children.Add(new TextBlock { Text = group.Key, Style = (Style)FindResource("GroupTitle") });
-            panel.Children.Add(new ItemsControl { ItemsSource = group.ToList(), ItemTemplate = (DataTemplate)FindResource("RowCard") });
+            Groups.Children.Add(new TextBlock { Text = group.Key, Style = (Style)FindResource("GroupTitle") });
+            Groups.Children.Add(new ItemsControl { ItemsSource = group.ToList(), ItemTemplate = (DataTemplate)FindResource("RowCard") });
         }
+        ShowGames(); // the background switch changes what the Games page says
     }
 
     static Row ToRow(Optimisation o)
@@ -323,7 +332,9 @@ public partial class MainWindow : Window
     void ShowGames()
     {
         var running = App.Watcher?.Running ?? [];
-        GameList.ItemsSource = App.GameList.Select(g => new GameRow(g, running.Contains(g.Name))).ToList();
+        var mode = App.CurrentMode;
+        foreach (var b in modeButtons) b.IsChecked = (ProfileMode)b.Tag == mode;
+        GameList.ItemsSource = App.GameList.Select(g => new GameRow(g, running.Contains(g.Name), Optimiser.Games.ProfileOn(g))).ToList();
         GameCount.Text = App.GameList.Count == 1 ? "1 game" : $"{App.GameList.Count} games";
         GameCount.Visibility = NoGames.Visibility = Visibility.Collapsed;
         if (App.GamesScanned) (App.GameList.Count > 0 ? GameCount : NoGames).Visibility = Visibility.Visible;
@@ -331,7 +342,8 @@ public partial class MainWindow : Window
         var watching = App.GameList.Count switch { 0 => "No games found yet.", 1 => "Watching 1 game.", var n => $"Watching {n} games." };
         var (status, hint, dot) =
             App.WatcherError is { } error ? ("Can't watch for games", $"Windows wouldn't report programs starting: {error}", Paint("Warn"))
-            : App.Watcher is { Enabled: false } ? ("Gaming profile paused", "It won't switch on for games until you turn it back on in Settings.", Paint("Muted"))
+            : mode == ProfileMode.Off ? ("Gaming profile off", "It won't switch on for games. Choose Automatic to have it switch on while a game runs.", Paint("Muted"))
+            : mode == ProfileMode.On ? ("Gaming profile on", "You switched it on, so it stays on until you choose Automatic or Off.", Paint("Good"))
             : running.Count > 0 ? ("Gaming profile on", $"{string.Join(", ", running)} {(running.Count == 1 ? "is" : "are")} running.", Paint("Good"))
             : !App.GamesScanned ? ("Looking for games", "Checking your Steam and Epic libraries.", Paint("Muted"))
             : AutoStart.IsOn() ? ("Waiting for a game", $"{watching} Optimiser runs in the tray, so this works with the window closed too.", Paint("Muted"))
@@ -343,6 +355,47 @@ public partial class MainWindow : Window
     }
 
     void OnShowGames(object sender, RoutedEventArgs e) => ((RadioButton)Nav.Children[2]).IsChecked = true;
+
+    // One Automatic / On / Off picker; the dashboard and Settings each get one, kept in step by ShowGames.
+    FrameworkElement ModePicker()
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        var group = $"Mode{modeButtons.Count}";
+        foreach (var (mode, tip) in new[] { (ProfileMode.Automatic, "On while a game is running"),
+                                             (ProfileMode.On, "On now, until you switch it back"),
+                                             (ProfileMode.Off, "Never switches on") })
+        {
+            var button = new RadioButton { Content = mode.ToString(), Tag = mode, GroupName = group, ToolTip = tip, Style = (Style)FindResource("Segment") };
+            System.Windows.Automation.AutomationProperties.SetName(button, $"Gaming profile: {mode}");
+            button.Click += OnModeClick;
+            modeButtons.Add(button);
+            row.Children.Add(button);
+        }
+        return new Border { Style = (Style)FindResource("SegmentBox"), Child = row };
+    }
+
+    async void OnModeClick(object sender, RoutedEventArgs e)
+    {
+        var mode = (ProfileMode)((RadioButton)sender).Tag;
+        if (mode == App.CurrentMode) return;
+        await Change("Switching the gaming profile…", () => App.SetProfileMode(mode), mode switch
+        {
+            ProfileMode.On => "Gaming profile on. It stays on until you choose Automatic or Off.",
+            ProfileMode.Off => "Gaming profile off. It won't switch on for games until you choose Automatic or On.",
+            _ => "The gaming profile now switches on by itself while a game is running.",
+        });
+    }
+
+    async void OnGameProfile(object sender, RoutedEventArgs e)
+    {
+        var box = (CheckBox)sender;
+        var game = ((GameRow)box.DataContext).Game;
+        var on = box.IsChecked == true;
+        await Change(on ? $"Adding {game.Name} to the gaming profile…" : $"Leaving {game.Name} out of the gaming profile…",
+            () => Optimiser.Games.SetProfile(game, on),
+            on ? $"The gaming profile switches on while {game.Name} runs." : $"The gaming profile no longer switches on for {game.Name}.");
+        await App.ScanGames(); // hands the watcher the new list
+    }
 
     Brush Paint(string name) => (Brush)FindResource(name);
 
@@ -522,6 +575,7 @@ public partial class MainWindow : Window
             using var file = File.Create(System.IO.Path.Combine(folder, $"{name}.png"));
             png.Save(file);
         }
+        if (Taskbar.GetId(new WindowInteropHelper(this).Handle) != Taskbar.AppId) Environment.Exit(3); // CI fails the run
         foreach (var nav in NavButtons)
         {
             nav.IsChecked = true;
@@ -529,6 +583,17 @@ public partial class MainWindow : Window
         }
         ShowUpdate(new Release(new Version(1, 0, 99), "", 0, null, "Settings page with update checks\nRemembers where you left the window"));
         await Save("Settings with an update");
+        ((RadioButton)Nav.Children[2]).IsChecked = true;
+        GameList.ItemsSource = new[]
+        {
+            new GameRow(new Game("Cyberpunk 2077", @"D:\SteamLibrary\steamapps\common\Cyberpunk 2077", "Steam"), true, true),
+            new GameRow(new Game("Fortnite", @"C:\Program Files\Epic Games\Fortnite", "Epic Games"), false, false),
+        };
+        GameCount.Text = "2 games";
+        GameCount.Visibility = Visibility.Visible;
+        NoGames.Visibility = Visibility.Collapsed;
+        (GameStatus.Text, GameHint.Text, GameDot.Fill) = ("Gaming profile on", "Cyberpunk 2077 is running.", Paint("Good"));
+        await Save("Games with a list");
         Sidebar.Width = SidebarOpen; // as it looks while hovered
         await Save("Sidebar");
         App.Quit();

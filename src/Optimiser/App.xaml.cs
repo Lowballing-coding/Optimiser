@@ -23,6 +23,8 @@ public partial class App : Application
     public static string? UpdateError { get; private set; }
     public static event Action? UpdateChanged;              // UI thread
 
+    public static ProfileMode CurrentMode => Watcher?.Mode ?? GameWatcher.SavedMode;
+
     static List<string> wasRunning = [];
     static Version? toldAbout;
 
@@ -65,7 +67,7 @@ public partial class App : Application
         try
         {
             Watcher = new GameWatcher(Backup);
-            Watcher.Changed += () => Dispatcher.InvokeAsync(OnGamesChanged);
+            Watcher.Changed += () => Dispatcher.InvokeAsync(() => OnGamesChanged());
             Watcher.Warning += message => Dispatcher.InvokeAsync(() => Notify(message, Forms.ToolTipIcon.Warning));
         }
         catch (Exception ex) { WatcherError = ex.Message; }
@@ -80,6 +82,14 @@ public partial class App : Application
             Visible = true,
         };
         tray.ContextMenuStrip.Items.Add("Open Optimiser", null, (_, _) => ShowWindow());
+        var profile = new Forms.ToolStripMenuItem("Gaming profile");
+        foreach (var mode in Enum.GetValues<ProfileMode>())
+            profile.DropDownItems.Add(new Forms.ToolStripMenuItem(mode.ToString(), null, (_, _) => SetModeFromTray(mode)) { Tag = mode });
+        tray.ContextMenuStrip.Items.Add(profile);
+        tray.ContextMenuStrip.Opening += (_, _) =>
+        {
+            foreach (Forms.ToolStripMenuItem item in profile.DropDownItems) item.Checked = (ProfileMode)item.Tag! == CurrentMode;
+        };
         tray.ContextMenuStrip.Items.Add("Exit", null, (_, _) => Quit());
         tray.MouseClick += (_, me) => { if (me.Button == Forms.MouseButtons.Left) ShowWindow(); };
         tray.BalloonTipClicked += (_, _) => ShowWindow();
@@ -115,7 +125,7 @@ public partial class App : Application
                 var games = Games.Find();
                 if (Watcher != null)
                 {
-                    Watcher.Games = games;
+                    Watcher.Games = [.. games.Where(Games.ProfileOn)];
                     Watcher.CheckRunning();
                 }
                 return games;
@@ -123,28 +133,48 @@ public partial class App : Application
         }
         catch (Exception e) { Notify($"Couldn't look for games: {e.Message}", Forms.ToolTipIcon.Warning); }
         GamesScanned = true;
-        OnGamesChanged();
+        OnGamesChanged(rescan: true);
     }
 
-    static void OnGamesChanged()
+    // rescan: a game can drop out of the running list because its switch was turned off, not because it closed.
+    static void OnGamesChanged(bool rescan = false)
     {
         var running = Watcher?.Running ?? [];
-        // One notification per change, so the battery warning isn't replaced by the "on" one a moment later.
+        // One notification per change, so the battery warning isn't replaced by the "on" one a moment later. In On
+        // mode the profile is already on, so only the battery warning is worth showing.
+        var automatic = CurrentMode == ProfileMode.Automatic;
         if (running.Count > 0 && wasRunning.Count == 0)
         {
-            var on = $"Gaming profile on for {string.Join(", ", running)}.";
+            var on = automatic ? $"Gaming profile on for {string.Join(", ", running)}. " : "";
             if (Settings.Get(BatteryWarningSetting, true) && Stats.OnBattery())
-                Notify($"{on} You're on battery, so the RTX GPU is held back. Plug in for full performance.", Forms.ToolTipIcon.Warning);
-            else if (Settings.Get(NotifySetting, true)) Notify(on);
+                Notify($"{on}You're on battery, so the RTX GPU is held back. Plug in for full performance.", Forms.ToolTipIcon.Warning);
+            else if (automatic && Settings.Get(NotifySetting, true)) Notify(on.TrimEnd());
         }
-        else if (running.Count == 0 && wasRunning.Count > 0 && Watcher?.Enabled != false && Settings.Get(NotifySetting, true))
-            Notify($"Gaming profile off now that {string.Join(", ", wasRunning)} closed.");
+        else if (running.Count == 0 && wasRunning.Count > 0 && automatic && Settings.Get(NotifySetting, true))
+            Notify(rescan ? "Gaming profile off." : $"Gaming profile off now that {string.Join(", ", wasRunning)} closed.");
         wasRunning = running;
 
-        var text = running.Count == 0 ? "Optimiser" : $"Optimiser: gaming profile on for {string.Join(", ", running)}";
+        var text = running.Count > 0 ? $"Optimiser: gaming profile on for {string.Join(", ", running)}"
+                 : Watcher?.ProfileOn == true ? "Optimiser: gaming profile on" : "Optimiser";
         if (tray != null) tray.Text = text.Length > 127 ? text[..124] + "..." : text; // Windows' limit
         GamesChanged?.Invoke();
     }
+
+    // Watcher first, so a WMI failure doesn't save a mode that isn't working. Runs off the UI thread: turning
+    // watching back on checks every running program.
+    public static void SetProfileMode(ProfileMode mode)
+    {
+        if (Watcher == null && mode != ProfileMode.Off) throw new InvalidOperationException($"Windows wouldn't report programs starting: {WatcherError}");
+        if (Watcher != null) Watcher.Mode = mode;
+        Settings.SetText(GameWatcher.ModeSetting, mode.ToString());
+    }
+
+    static void SetModeFromTray(ProfileMode mode) => Task.Run(() =>
+    {
+        try { SetProfileMode(mode); }
+        catch (Exception e) { Current.Dispatcher.InvokeAsync(() => Notify($"Couldn't change the gaming profile: {e.Message}", Forms.ToolTipIcon.Warning)); }
+        Current.Dispatcher.InvokeAsync(() => OnGamesChanged()); // also when there's no watcher to say so
+    });
 
     public static async Task CheckForUpdates()
     {
