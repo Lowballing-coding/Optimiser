@@ -30,14 +30,14 @@ jobs:
         run: >
           dotnet publish src/Optimiser -c Release -r win-x64 --self-contained
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:EnableCompressionInSingleFile=true -o out
+          -p:EnableCompressionInSingleFile=true -p:Version=1.0.${{ github.run_number }} -o out
 
       - name: Snapshot every page
         timeout-minutes: 3
         run: |
           $app = Start-Process out/Optimiser.exe -ArgumentList '--snapshot', "$PWD/snapshots" -Wait -PassThru
           Get-ChildItem snapshots
-          if ($app.ExitCode -ne 0 -or (Get-ChildItem snapshots/*.png).Count -ne 6) { exit 1 }
+          if ($app.ExitCode -ne 0 -or (Get-ChildItem snapshots/*.png).Count -ne 8) { exit 1 }
 
       # Claude can't download Actions artifacts from its sandbox, but it can fetch a git branch.
       - name: Share snapshots on the "snapshots" branch
@@ -58,11 +58,13 @@ jobs:
           name: snapshots
           path: snapshots
 
+      # The app's update check reads the version from the title and shows the notes as "What's new".
       - name: Publish the "latest" release
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ github.event.head_commit.message }}
         run: |
           gh release delete latest --yes --cleanup-tag
           gh release create latest out/Optimiser.exe --target ${{ github.sha }} --prerelease `
-            --title "Optimiser (latest build)" --notes "Built from ${{ github.sha }}."
+            --title "Optimiser 1.0.${{ github.run_number }}" --notes "$env:NOTES"

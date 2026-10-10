@@ -12,7 +12,8 @@ namespace Optimiser;
 public sealed class GameWatcher : IDisposable
 {
     public const string PowerModeSetting = "GamingPowerMode", PrioritySetting = "GamingPriority",
-        NoThrottleSetting = "GamingNoThrottle", GpuSetting = "GamingGpuPreference", SavedPowerMode = "PowerModeBeforeGaming";
+        NoThrottleSetting = "GamingNoThrottle", GpuSetting = "GamingGpuPreference", SavedPowerMode = "PowerModeBeforeGaming",
+        EnabledSetting = "GamingProfile";
     public const string GpuPreferences = @"HKEY_CURRENT_USER\Software\Microsoft\DirectX\UserGpuPreferences";
     static readonly Guid BestPerformance = new("ded574b5-45a0-4f42-8737-46345c09c238");
 
@@ -21,17 +22,48 @@ public sealed class GameWatcher : IDisposable
     readonly ManagementEventWatcher stops = new(new EventQuery("SELECT ProcessID FROM Win32_ProcessStopTrace"));
     readonly Dictionary<uint, Game> running = [];
     List<Game> games = [];
+    volatile bool enabled;
 
     public event Action? Changed;            // a game started or stopped
-    public event Action<string>? Warning;     // something worth a tray notification
+    public event Action<string>? Warning;     // something went wrong, worth a tray notification
 
     public GameWatcher(Backup backup)
     {
         this.backup = backup;
         starts.EventArrived += (_, e) => OnStart((uint)e.NewEvent["ProcessID"]);
         stops.EventArrived += (_, e) => OnStop((uint)e.NewEvent["ProcessID"]);
+        enabled = Settings.Get(EnabledSetting, true);
+        if (!enabled) return;
         starts.Start();
         stops.Start();
+    }
+
+    // Off pauses the gaming profile: stops watching and puts the power mode back.
+    public bool Enabled
+    {
+        get => enabled;
+        set
+        {
+            if (value == enabled) return;
+            enabled = value;
+            if (value)
+            {
+                starts.Start();
+                stops.Start();
+                CheckRunning();
+            }
+            else
+            {
+                starts.Stop(); // outside the lock: Stop waits for event handlers, which take it
+                stops.Stop();
+                lock (running)
+                {
+                    running.Clear();
+                    RestorePowerMode();
+                }
+            }
+            Changed?.Invoke();
+        }
     }
 
     public List<Game> Games
@@ -49,14 +81,14 @@ public sealed class GameWatcher : IDisposable
     // another closes can't leave the power mode stuck on Best performance.
     void OnStart(uint pid)
     {
-        if (ExePath(pid) is not { } exe) return;
+        if (!enabled || ExePath(pid) is not { } exe) return;
         Game? game = null;
         try
         {
             lock (running)
             {
                 game = Optimiser.Games.ForExe(exe, games);
-                if (game == null || running.ContainsKey(pid)) return;
+                if (!enabled || game == null || running.ContainsKey(pid)) return; // paused while this one was starting
                 running[pid] = game;
                 if (running.Count == 1) StartProfile();
             }
@@ -102,8 +134,6 @@ public sealed class GameWatcher : IDisposable
             if (Settings.GetText(SavedPowerMode) == null) Settings.SetText(SavedPowerMode, current.ToString());
             PowerSetActiveOverlayScheme(BestPerformance);
         }
-        if (Stats.OnBattery())
-            Warning?.Invoke("You're on battery, so the RTX GPU is held back. Plug in for full performance.");
     }
 
     // Puts back the power mode from before the last game started, if one was saved.

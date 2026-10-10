@@ -164,6 +164,18 @@ Check(AutoStart.IsOn() && File.Exists(AutoStart.InstalledExe), "start with Windo
 AutoStart.TurnOff();
 Check(!AutoStart.IsOn() && !Directory.Exists(AutoStart.InstallFolder), "turning it off removes both");
 
+// Updates: reads the version from the release title and only offers this repo's own download.
+const string release = """
+    {"name": "Optimiser 1.0.12", "body": "Merge pull request #7 from Lowballing-coding/settings-updates\n\nSettings page\r\n",
+     "assets": [{"name": "Optimiser.exe", "size": 70000000, "digest": "sha256:abc123",
+                 "browser_download_url": "https://github.com/Lowballing-coding/Optimiser/releases/download/latest/Optimiser.exe"}]}
+    """;
+var update = Updates.Parse(release, new Version(1, 0, 9));
+Check(update is { Size: 70000000, Sha256: "abc123", Notes: "Settings page" } && update.Version == new Version(1, 0, 12), "finds a newer release");
+Check(Updates.Parse(release, new Version(1, 0, 12)) == null, "no update when already on that version");
+Check(Updates.Parse(release.Replace("Lowballing-coding/Optimiser/releases", "someone/else/releases"), new Version(1, 0, 9)) == null,
+    "ignores a download from anywhere else");
+
 Directory.Delete(temp, true);
 Registry.CurrentUser.DeleteSubKeyTree(sub);
 Console.WriteLine("All checks passed");
