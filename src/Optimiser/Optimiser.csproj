@@ -10,6 +10,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\optimiser.ico</ApplicationIcon>
+    <StartupObject>Optimiser.Program</StartupObject>
     <Version>0.1.0</Version>
   </PropertyGroup>
 

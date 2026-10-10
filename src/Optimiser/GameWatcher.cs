@@ -17,8 +17,8 @@ public sealed class GameWatcher : IDisposable
     static readonly Guid BestPerformance = new("ded574b5-45a0-4f42-8737-46345c09c238");
 
     readonly Backup backup;
-    readonly ManagementEventWatcher starts = new(new WqlEventQuery("SELECT ProcessID FROM Win32_ProcessStartTrace"));
-    readonly ManagementEventWatcher stops = new(new WqlEventQuery("SELECT ProcessID FROM Win32_ProcessStopTrace"));
+    readonly ManagementEventWatcher starts = new(new EventQuery("SELECT ProcessID FROM Win32_ProcessStartTrace"));
+    readonly ManagementEventWatcher stops = new(new EventQuery("SELECT ProcessID FROM Win32_ProcessStopTrace"));
     readonly Dictionary<uint, Game> running = [];
     List<Game> games = [];
 

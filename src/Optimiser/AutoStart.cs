@@ -15,6 +15,7 @@ public static class AutoStart
     // rather than a file in Downloads that any program could swap.
     public static string InstallFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Optimiser");
     public static string InstalledExe => Path.Combine(InstallFolder, "Optimiser.exe");
+    public static string RuntimeFolder => Path.Combine(InstallFolder, "runtime"); // see Program.Main
 
     public static bool IsOn()
     {
@@ -69,12 +70,13 @@ public static class AutoStart
         try
         {
             File.Delete(InstalledExe);
+            if (Directory.Exists(RuntimeFolder)) Directory.Delete(RuntimeFolder, recursive: true);
             Directory.Delete(InstallFolder); // only if empty
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // it's the copy that's running
     }
 
-    static bool IsInstalled(string exe) => string.Equals(Path.GetFullPath(exe), InstalledExe, StringComparison.OrdinalIgnoreCase);
+    public static bool IsInstalled(string exe) => string.Equals(Path.GetFullPath(exe), InstalledExe, StringComparison.OrdinalIgnoreCase);
 
     static dynamic Folder()
     {
