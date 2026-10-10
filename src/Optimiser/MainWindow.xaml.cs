@@ -29,6 +29,11 @@ public record BackupGroup(string Tweak, string Detail);
 public partial class MainWindow : Window
 {
     bool busy;
+    Stats? stats;
+    readonly DispatcherTimer statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    readonly StatTile gpuTemp = new("GPU temperature", showTrend: true), gpuLoad = new("GPU load", showTrend: true),
+        gpuClock = new("GPU clock", false), gpuPower = new("GPU power", false), vram = new("Graphics memory", false),
+        cpuLoad = new("CPU load", showTrend: true), ram = new("Memory", false), power = new("Power", false);
 
     public MainWindow()
     {
@@ -43,6 +48,9 @@ public partial class MainWindow : Window
             MaxButton.ToolTip = maximised ? "Restore" : "Maximise";
         };
         Loaded += OnLoaded;
+        Closed += (_, _) => stats?.Dispose();
+        statsTimer.Tick += (_, _) => ShowStats();
+        statsTimer.Start();
         ShowChanges();
     }
 
@@ -237,6 +245,38 @@ public partial class MainWindow : Window
         PageTitle.Text = page;
         foreach (FrameworkElement p in Pages.Children)
             p.Visibility = p.Name == page ? Visibility.Visible : Visibility.Collapsed;
+        ShowStats();
+    }
+
+    // Called every second, but only reads anything while the Stats page is on screen: polling the GPU stops a
+    // laptop's RTX GPU from going to sleep.
+    void ShowStats()
+    {
+        if (Stats.Visibility != Visibility.Visible || !IsVisible || WindowState == WindowState.Minimized) return;
+        if (stats == null)
+        {
+            stats = new Stats();
+            var gpuTiles = new[] { gpuTemp, gpuLoad, gpuClock, gpuPower, vram };
+            var first = stats.Read();
+            foreach (var tile in (first.GpuTemp == null ? [] : gpuTiles).Append(cpuLoad).Append(ram).Append(power))
+                Tiles.Children.Add(tile);
+            StatsIntro.Text = first.GpuTemp == null
+                ? "Live readings, updated every second. No Nvidia graphics driver was found, so there are no GPU readings."
+                : "Live readings, updated every second. Reading the RTX GPU keeps it awake, so Optimiser only reads it while this page is open.";
+        }
+
+        var r = stats.Read();
+        if (r.GpuTemp is { } t)
+            gpuTemp.Show($"{t:0}", "°C", t / 100, t >= 87 ? "Hot. The GPU slows itself down at around 87 °C." : null, t);
+        if (r.GpuLoad is { } l) gpuLoad.Show($"{l:0}", "%", l / 100, trendValue: l);
+        if (r.GpuClock is { } c) gpuClock.Show($"{c:0}", r.GpuMaxClock is { } mc ? $"of {mc:0} MHz" : "MHz", c / r.GpuMaxClock);
+        if (r.GpuWatts is { } w) gpuPower.Show($"{w:0}", r.GpuWattLimit is { } wl ? $"of {wl:0} W" : "W", w / r.GpuWattLimit);
+        if (r.VramUsedGb is { } vu) vram.Show($"{vu:0.0}", $"of {r.VramTotalGb:0} GB", vu / r.VramTotalGb);
+        cpuLoad.Show($"{r.CpuLoad:0}", "%", r.CpuLoad / 100, trendValue: r.CpuLoad);
+        ram.Show($"{r.RamUsedGb:0.0}", $"of {r.RamTotalGb:0} GB", r.RamUsedGb / r.RamTotalGb);
+        if (!r.HasBattery) power.Show("Mains", "", 1);
+        else power.Show(r.OnBattery ? "On battery" : "Plugged in", r.BatteryPercent is { } b ? $"{b}% charged" : "",
+            r.BatteryPercent / 100.0, r.OnBattery ? "The GPU is held back on battery. Plug in for full performance." : null);
     }
 
     void ShowChanges()
