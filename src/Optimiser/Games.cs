@@ -15,7 +15,7 @@ public record Game(string Name, string Folder, string Source)
 public static partial class Games
 {
     public const string AddedByYou = "Added by you";
-    const string FoldersSetting = "GameFolders";
+    const string FoldersSetting = "GameFolders", ProfileOffSetting = "GamesWithoutProfile";
 
     public static List<Game> Find()
     {
@@ -103,6 +103,15 @@ public static partial class Games
             return "That folder has more than games in it. Choose the folder one game is installed in.";
         Settings.SetList(FoldersSetting, [.. Settings.GetList(FoldersSetting).Append(full).Distinct(StringComparer.OrdinalIgnoreCase)]);
         return null;
+    }
+
+    // Each game's own gaming profile switch on the Games page. On unless you turned it off.
+    public static bool ProfileOn(Game game) => !Settings.GetList(ProfileOffSetting).Contains(game.Folder, StringComparer.OrdinalIgnoreCase);
+
+    public static void SetProfile(Game game, bool on)
+    {
+        var off = Settings.GetList(ProfileOffSetting).Where(f => !f.Equals(game.Folder, StringComparison.OrdinalIgnoreCase));
+        Settings.SetList(ProfileOffSetting, [.. on ? off : off.Append(game.Folder)]);
     }
 
     public static void Remove(string folder) =>

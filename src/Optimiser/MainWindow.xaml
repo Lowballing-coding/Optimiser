@@ -49,6 +49,44 @@
       </Style.Triggers>
     </Style>
 
+    <!-- Automatic / On / Off for the gaming profile -->
+    <Style x:Key="SegmentBox" TargetType="Border">
+      <Setter Property="Background" Value="{StaticResource Bg}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Padding" Value="3" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="Segment" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="{StaticResource Muted}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="Box" Background="Transparent" CornerRadius="5" Padding="14,5">
+              <ContentPresenter HorizontalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="{StaticResource Text}" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Box" Property="Background" Value="{StaticResource Line}" />
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Box" Property="Background" Value="{StaticResource Accent}" />
+                <Setter Property="Foreground" Value="{StaticResource Bg}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <!-- Status word for checks Optimiser can only detect -->
     <Style x:Key="CheckStatus" TargetType="TextBlock">
       <Setter Property="VerticalAlignment" Value="Center" />
@@ -204,7 +242,10 @@
 
               <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
                 <StackPanel>
-                  <TextBlock Text="Gaming profile" Style="{StaticResource PanelTitle}" />
+                  <DockPanel Margin="0,0,0,14">
+                    <ContentControl x:Name="DashMode" DockPanel.Dock="Right" Focusable="False" />
+                    <TextBlock Text="Gaming profile" Style="{StaticResource PanelTitle}" Margin="0" VerticalAlignment="Center" />
+                  </DockPanel>
                   <DockPanel>
                     <Button DockPanel.Dock="Right" Style="{StaticResource SecondaryButton}" Padding="14,6" Margin="20,0,0,0"
                             VerticalAlignment="Center" Content="Your games" Click="OnShowGames" />
@@ -246,7 +287,7 @@
       <ScrollViewer x:Name="Games" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="0,0,14,28">
           <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left"
-                     Text="Optimiser finds your Steam and Epic games by itself. While one is running it switches on the gaming profile from the Optimisations page, and puts your normal settings back when the game closes." />
+                     Text="Optimiser finds your Steam and Epic games by itself. While one is running it switches on the gaming profile from the Optimisations page, and puts your normal settings back when the game closes. Turn a game's switch off if you don't want the gaming profile for it." />
 
           <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
             <DockPanel>
@@ -277,6 +318,9 @@
                       </Border>
                       <Button Style="{StaticResource SecondaryButton}" Padding="14,6" Margin="10,0,0,0" Content="Remove"
                               Click="OnRemoveGame" Visibility="{Binding Game.CanRemove, Converter={StaticResource Vis}}" />
+                      <CheckBox Style="{StaticResource Switch}" Margin="16,0,0,0" IsChecked="{Binding ProfileOn, Mode=OneWay}"
+                                Click="OnGameProfile" ToolTip="{Binding ProfileTip}"
+                                AutomationProperties.Name="{Binding ProfileTip}" />
                     </StackPanel>
                     <StackPanel>
                       <TextBlock Text="{Binding Game.Name}" FontWeight="SemiBold" />
@@ -364,7 +408,19 @@
           </Border>
           <ItemsControl x:Name="UpdateSettings" ItemTemplate="{StaticResource RowCard}" />
 
-          <StackPanel x:Name="SettingGroups" />
+          <TextBlock Text="Gaming profile" Style="{StaticResource GroupTitle}" />
+          <Border Style="{StaticResource Panel}" Padding="20,16" Margin="0,0,0,10">
+            <DockPanel>
+              <ContentControl x:Name="SettingsMode" DockPanel.Dock="Right" Margin="24,0,0,0" Focusable="False" />
+              <StackPanel>
+                <TextBlock Text="When the gaming profile is on" FontWeight="SemiBold" FontSize="15" />
+                <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="0,6,0,0" MaxWidth="620" HorizontalAlignment="Left"
+                           LineHeight="19"
+                           Text="Automatic switches it on while a game is running. On keeps it on until you switch it back, game or not. Off never switches it on. You can also choose this from the tray icon's menu." />
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <ItemsControl x:Name="ProfileSettings" ItemTemplate="{StaticResource RowCard}" />
 
           <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="2,16,0,0">
             Tip: Ctrl+1 to Ctrl+7 jump straight to each page.

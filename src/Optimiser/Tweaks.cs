@@ -224,19 +224,10 @@ public static class Tweaks
 
     public const string GamingProfile = "Gaming profile", UpdatesGroup = "Updates";
 
-    // The Settings page: how Optimiser itself behaves. Not part of the score.
+    // The Settings page: how Optimiser itself behaves. Not part of the score. The gaming profile's mode has its own
+    // Automatic / On / Off picker above these.
     public static List<Optimisation> AppSettings() =>
     [
-        new()
-        {
-            Name = "Switch to the gaming profile automatically",
-            Group = GamingProfile,
-            Description = "Turn this off to pause the gaming profile without closing Optimiser. Your games and the switches on "
-                        + "the Optimisations page stay as they are for when you turn it back on.",
-            IsOn = () => App.Watcher?.Enabled ?? Settings.Get(GameWatcher.EnabledSetting, true),
-            TurnOn = () => SetGamingProfile(true),
-            TurnOff = () => SetGamingProfile(false),
-        },
         Background(GamingProfile),
         SettingSwitch("Tell me when the gaming profile switches on and off", GamingProfile,
             "Shows a notification when a game starts and the gaming profile turns on, and again when it turns off.",
@@ -249,12 +240,6 @@ public static class Tweaks
             + "until you choose to.",
             Updates.AutoCheckSetting),
     ];
-
-    static void SetGamingProfile(bool on)
-    {
-        if (App.Watcher != null) App.Watcher.Enabled = on; // first, so a WMI failure doesn't save a setting that isn't working
-        Settings.Set(GameWatcher.EnabledSetting, on);
-    }
 
     // A switch made of registry values. On = every value already matches; off = undo from the backup.
     public static Optimisation RegistryTweak(Backup backup, string name, string group, string description,
