@@ -11,6 +11,8 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\optimiser.ico</ApplicationIcon>
     <StartupObject>Optimiser.Program</StartupObject>
+    <!-- Startup hooks would let a DOTNET_STARTUP_HOOKS variable in the user's environment run code in this admin app -->
+    <StartupHookSupport>false</StartupHookSupport>
     <Version>1.0.0</Version>
   </PropertyGroup>
 
