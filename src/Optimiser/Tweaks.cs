@@ -1,5 +1,8 @@
 using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
 namespace Optimiser;
@@ -28,6 +31,12 @@ public static class Tweaks
     public const string WhileGaming = "While a game is running";
     public const string WindowsSettings = "Windows settings";
     public const string GpuTweakName = "Run games on the dedicated GPU";
+    public const string StartupGroup = "Apps that start with Windows";
+    const string RefreshRateName = "Full refresh rate", SavedRates = "RefreshRatesBefore";
+    const string WindowedGames = "Optimisations for windowed games", DirectXGlobal = "DirectXUserGlobalSettings";
+    const string Mouse = @"HKEY_CURRENT_USER\Control Panel\Mouse";
+    static readonly string NvidiaApp = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+        @"NVIDIA Corporation\NVIDIA app\CEF\NVIDIA app.exe");
 
     public static List<Optimisation> All(Backup backup) =>
     [
@@ -55,6 +64,8 @@ public static class Tweaks
             ButtonText = "Open MSI Center",
             Button = OpenMsiCenter,
         },
+        RefreshRate(backup),
+        NvidiaDriver(),
         Background(WhileGaming),
         SettingSwitch("Best performance power mode", WhileGaming,
             "Switches Windows' power mode to Best performance while a game runs, then puts your usual mode back when it "
@@ -108,7 +119,92 @@ public static class Tweaks
             + "background. A small saving in CPU and disk use.",
             [(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\DiagTrack", "Start", 4)],
             after: on => Run("sc.exe", on ? "stop DiagTrack" : "start DiagTrack")),
+        new()
+        {
+            Name = WindowedGames,
+            Group = WindowsSettings,
+            Description = "A Windows 11 setting that runs borderless and windowed games the way fullscreen ones run, which lowers "
+                        + "input lag. It's under Graphics in Windows' display settings.",
+            AppliesTo = _ => Environment.OSVersion.Version.Build >= 22621, // Windows 11 22H2
+            UsesBackup = true,
+            IsOn = () => (Reg.Read(GameWatcher.GpuPreferences, DirectXGlobal) as string ?? "").Contains("SwapEffectUpgradeEnable=1;"),
+            TurnOn = () => backup.Set(WindowedGames, GameWatcher.GpuPreferences, DirectXGlobal,
+                WithFlag(Reg.Read(GameWatcher.GpuPreferences, DirectXGlobal) as string ?? "", "SwapEffectUpgradeEnable", 1),
+                RegistryValueKind.String),
+            TurnOff = () => backup.Undo(WindowedGames),
+        },
+        RegistryTweak(backup, "Turn off mouse acceleration", WindowsSettings,
+            "Windows moves the pointer further when you move the mouse quickly (\"Enhance pointer precision\"), so the same "
+            + "hand movement can turn a different amount in a game. Off makes aiming with a mouse consistent.",
+            [(Mouse, "MouseSpeed", "0"), (Mouse, "MouseThreshold1", "0"), (Mouse, "MouseThreshold2", "0")],
+            after: _ => ApplyMouse()),
+        .. StartupApps.Find().Select(app => StartupApps.Tweak(backup, app)),
     ];
+
+    // The rates from before are kept in Optimiser's own key through the backup, so the change is listed on the
+    // Backups page like any other and undo puts each screen back.
+    static Optimisation RefreshRate(Backup backup)
+    {
+        var slow = Display.Screens().FirstOrDefault(s => s.Hz < s.MaxHz);
+        return new()
+        {
+            Name = RefreshRateName,
+            Group = BiggestWins,
+            Description = (slow != null ? $"Your screen can run at {slow.MaxHz} Hz but is set to {slow.Hz} Hz. " : "")
+                        + "A higher refresh rate shows more of the frames your GPU draws, so games look smoother and react "
+                        + "faster. Windows sometimes drops back to 60 Hz after a driver update.",
+            AppliesTo = _ => Display.Screens().Any(s => s.MaxHz > 60),
+            IsOn = () => Display.Screens().All(s => s.Hz >= s.MaxHz),
+            UsesBackup = true,
+            TurnOn = () =>
+            {
+                var screens = Display.Screens();
+                if (!backup.Owns(RefreshRateName))
+                    backup.Set(RefreshRateName, Settings.Key, SavedRates, string.Join(";", screens.Select(s => $"{s.Device}={s.Hz}")),
+                        RegistryValueKind.String);
+                foreach (var s in screens.Where(s => s.Hz < s.MaxHz)) Display.SetRefreshRate(s.Device, s.MaxHz);
+            },
+            TurnOff = () =>
+            {
+                foreach (var screen in (Settings.GetText(SavedRates) ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
+                    if (screen.Split('=') is [var device, var hz] && int.TryParse(hz, out var rate)) Display.SetRefreshRate(device, rate);
+                backup.Undo(RefreshRateName);
+            },
+        };
+    }
+
+    static Optimisation NvidiaDriver()
+    {
+        var date = App.Hardware?.NvidiaDriverDate;
+        return new()
+        {
+            Name = "Up-to-date Nvidia driver",
+            Group = BiggestWins,
+            Description = $"Your Nvidia driver is from {date:MMMM yyyy}. Nvidia's Game Ready drivers bring fixes and speed-ups for "
+                        + "recent games, so it's worth updating every few months. The NVIDIA app does it in a couple of clicks.",
+            AppliesTo = hw => hw.NvidiaDriverDate != null,
+            IsOn = () => date > DateTime.Now.AddDays(-90),
+            ButtonText = "Open NVIDIA app",
+            Button = () => OpenAsYou(File.Exists(NvidiaApp) ? NvidiaApp : "https://www.nvidia.com/en-us/software/nvidia-app/"),
+        };
+    }
+
+    // Puts one "Name=value;" entry into a list like Windows' DirectX graphics settings, keeping the others.
+    public static string WithFlag(string current, string name, int value) =>
+        Regex.Replace(current, $@"(?<![A-Za-z]){name}=\d+;", "") + $"{name}={value};";
+
+    // Applies the mouse values now; the registry alone only takes effect at the next sign-in.
+    static void ApplyMouse()
+    {
+        int Get(string name) => int.TryParse(Reg.Read(Mouse, name) as string, out var v) ? v : 0;
+        SystemParametersInfo(SetMouse, 0, [Get("MouseThreshold1"), Get("MouseThreshold2"), Get("MouseSpeed")], SendChange);
+    }
+
+    // Through Explorer, so a browser or app opens as you rather than with Optimiser's admin rights.
+    public static void OpenAsYou(string target) => Process.Start("explorer.exe", $"\"{target}\"")?.Dispose();
+
+    const uint SetMouse = 0x0004, SendChange = 0x02;
+    [DllImport("user32.dll")] static extern bool SystemParametersInfo(uint action, uint param, int[] values, uint flags);
 
     // Shown on both the Optimisations and Settings pages.
     static Optimisation Background(string group) => new()

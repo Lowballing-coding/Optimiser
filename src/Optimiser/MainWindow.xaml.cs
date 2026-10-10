@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -178,7 +177,7 @@ public partial class MainWindow : Window
         var alreadyInWindows = o.UsesBackup && on && !App.Backup.Owns(o.Name);
         bool changedThisSession;
         lock (App.RestartNeeded) changedThisSession = App.RestartNeeded.Contains(o.Name);
-        var note = alreadyInWindows ? "Already on in Windows"
+        var note = alreadyInWindows ? "Already set in Windows"
                  : o.NeedsRestart && changedThisSession ? "Restart to finish"
                  : o.NeedsRestart ? "Needs a restart"
                  : null;
@@ -470,9 +469,7 @@ public partial class MainWindow : Window
         busy = false;
     }
 
-    // explorer.exe opens the browser as you rather than as admin.
-    void OnOpenGitHub(object sender, RoutedEventArgs e) =>
-        Process.Start("explorer.exe", "https://github.com/Lowballing-coding/Optimiser/commits/main")?.Dispose();
+    void OnOpenGitHub(object sender, RoutedEventArgs e) => Tweaks.OpenAsYou("https://github.com/Lowballing-coding/Optimiser/commits/main");
 
     void ShowState()
     {
