@@ -24,7 +24,7 @@ public static class AutoStart
             Folder().GetTask(TaskName);
             return true;
         }
-        catch (COMException) { return false; }
+        catch (Exception e) when (e is FileNotFoundException or COMException) { return false; } // COM's "not found" arrives as FileNotFound
     }
 
     // Also run on every start while it's on, so a newer download replaces the installed copy.
@@ -66,7 +66,7 @@ public static class AutoStart
     public static void TurnOff()
     {
         try { Folder().DeleteTask(TaskName, 0); }
-        catch (COMException) { } // already gone
+        catch (Exception e) when (e is FileNotFoundException or COMException) { } // already gone
         try
         {
             File.Delete(InstalledExe);
