@@ -53,6 +53,8 @@ public sealed class Stats : IDisposable
             hasBattery, power.ACLineStatus == 0, power.BatteryLifePercent <= 100 ? power.BatteryLifePercent : null);
     }
 
+    public static bool OnBattery() => GetSystemPowerStatus(out var p) && p.ACLineStatus == 0;
+
     const double Gb = 1L << 30;
 
     // Share of time the CPU wasn't idle since the last call. Kernel time includes idle time.

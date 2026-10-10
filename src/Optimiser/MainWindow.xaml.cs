@@ -26,9 +26,11 @@ public record Row(Optimisation Item, bool On, bool CanSwitch, string? Note)
 // One tweak's saved originals on the Backups page.
 public record BackupGroup(string Tweak, string Detail);
 
+public record GameRow(Game Game, bool Running);
+
 public partial class MainWindow : Window
 {
-    bool busy;
+    bool busy, toldAboutTray;
     Stats? stats;
     readonly DispatcherTimer statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     readonly StatTile gpuTemp = new("GPU temperature", showTrend: true), gpuLoad = new("GPU load", showTrend: true),
@@ -49,6 +51,16 @@ public partial class MainWindow : Window
         };
         Loaded += OnLoaded;
         Closed += (_, _) => stats?.Dispose();
+        Closing += (_, e) =>
+        {
+            // With background mode on, closing keeps Optimiser running in the tray to watch for games.
+            if (App.Exiting || !AutoStart.IsOn()) return;
+            e.Cancel = true;
+            Hide();
+            if (!toldAboutTray) App.Notify("Optimiser is still running here and switches to the gaming profile when a game starts. Right-click to exit.");
+            toldAboutTray = true;
+        };
+        App.GamesChanged += ShowGames;
         statsTimer.Tick += (_, _) => ShowStats();
         statsTimer.Start();
         ShowChanges();
@@ -146,6 +158,7 @@ public partial class MainWindow : Window
             Groups.Children.Add(new TextBlock { Text = group.Key, Style = (Style)FindResource("GroupTitle") });
             Groups.Children.Add(new ItemsControl { ItemsSource = group.ToList(), ItemTemplate = (DataTemplate)FindResource("RowCard") });
         }
+        ShowGames(); // the background switch changes what the Games page says
     }
 
     static Row ToRow(Optimisation o)
@@ -274,9 +287,57 @@ public partial class MainWindow : Window
         if (r.VramUsedGb is { } vu) vram.Show($"{vu:0.0}", $"of {r.VramTotalGb:0} GB", vu / r.VramTotalGb);
         cpuLoad.Show($"{r.CpuLoad:0}", "%", r.CpuLoad / 100, trendValue: r.CpuLoad);
         ram.Show($"{r.RamUsedGb:0.0}", $"of {r.RamTotalGb:0} GB", r.RamUsedGb / r.RamTotalGb);
-        if (!r.HasBattery) power.Show("Mains", "", 1);
+        if (!r.HasBattery) power.Show("Mains", "", null);
         else power.Show(r.OnBattery ? "On battery" : "Plugged in", r.BatteryPercent is { } b ? $"{b}% charged" : "",
             r.BatteryPercent / 100.0, r.OnBattery ? "The GPU is held back on battery. Plug in for full performance." : null);
+    }
+
+    void ShowGames()
+    {
+        var running = App.Watcher?.Running ?? [];
+        GameList.ItemsSource = App.GameList.Select(g => new GameRow(g, running.Contains(g.Name))).ToList();
+        GameCount.Text = App.GameList.Count == 1 ? "1 game" : $"{App.GameList.Count} games";
+        GameCount.Visibility = NoGames.Visibility = Visibility.Collapsed;
+        if (App.GamesScanned) (App.GameList.Count > 0 ? GameCount : NoGames).Visibility = Visibility.Visible;
+
+        var background = AutoStart.IsOn();
+        (GameStatus.Text, GameHint.Text, GameDot.Fill) =
+            App.WatcherError is { } error ? ("Can't watch for games", $"Windows wouldn't report programs starting: {error}", Paint("Warn"))
+            : running.Count > 0 ? ("Gaming profile on", $"{string.Join(", ", running)} {(running.Count == 1 ? "is" : "are")} running.", Paint("Good"))
+            : !App.GamesScanned ? ("Looking for games", "Checking your Steam and Epic libraries.", Paint("Line"))
+            : background ? ("Waiting for a game", "Optimiser runs in the tray, so this works with the window closed too.", Paint("Line"))
+            : ("Waiting for a game", "This only works while Optimiser is open. Turn on \"Run in the background and start with Windows\" "
+                                   + "on the Optimisations page so it keeps working after you close the window.", Paint("Warn"));
+    }
+
+    Brush Paint(string name) => (Brush)FindResource(name);
+
+    async void OnScanGames(object sender, RoutedEventArgs e)
+    {
+        StatusText.Text = "Looking for games…";
+        await App.ScanGames();
+        StatusText.Text = $"Found {GameCount.Text}.";
+    }
+
+    async void OnAddGame(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Choose the folder a game is installed in" };
+        if (dialog.ShowDialog(this) != true) return;
+        if (Optimiser.Games.Add(dialog.FolderName) is { } refused)
+        {
+            StatusText.Text = refused;
+            return;
+        }
+        await App.ScanGames();
+        StatusText.Text = $"Added {System.IO.Path.GetFileName(dialog.FolderName)}.";
+    }
+
+    async void OnRemoveGame(object sender, RoutedEventArgs e)
+    {
+        var game = ((GameRow)((FrameworkElement)sender).DataContext).Game;
+        Optimiser.Games.Remove(game.Folder); // "Games" alone is the page
+        await App.ScanGames();
+        StatusText.Text = $"Removed {game.Name}.";
     }
 
     void ShowChanges()
@@ -347,7 +408,7 @@ public partial class MainWindow : Window
             using var file = File.Create(System.IO.Path.Combine(folder, $"{nav.Tag}.png"));
             png.Save(file);
         }
-        Application.Current.Shutdown();
+        App.Quit();
     }
 
     void OnMinimise(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;

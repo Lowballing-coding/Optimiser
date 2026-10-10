@@ -27,6 +27,7 @@ public static class Tweaks
     public const string BiggestWins = "Biggest wins on this laptop";
     public const string WhileGaming = "While a game is running";
     public const string WindowsSettings = "Windows settings";
+    public const string GpuTweakName = "Run games on the dedicated GPU";
 
     public static List<Optimisation> All(Backup backup) =>
     [
@@ -53,6 +54,48 @@ public static class Tweaks
             CountsToScore = false,
             ButtonText = "Open MSI Center",
             Button = OpenMsiCenter,
+        },
+        new()
+        {
+            Name = "Run in the background and start with Windows",
+            Group = WhileGaming,
+            Description = "The gaming profile only works while Optimiser is running. This starts it in the system tray when you "
+                        + "sign in, without a UAC prompt, and closing the window leaves it running there.",
+            IsOn = AutoStart.IsOn,
+            TurnOn = () => AutoStart.TurnOn(Environment.ProcessPath!),
+            TurnOff = AutoStart.TurnOff,
+        },
+        SettingSwitch("Best performance power mode", WhileGaming,
+            "Switches Windows' power mode to Best performance while a game runs, then puts your usual mode back when it "
+            + "closes. Higher clocks while you play, normal battery life the rest of the time.",
+            GameWatcher.PowerModeSetting),
+        SettingSwitch("Never power-throttle games", WhileGaming,
+            "Windows can treat a game as background work, for example while you alt-tab, and slow it down. On Intel 12th "
+            + "gen and newer it also moves it onto the slower efficiency cores. This tells Windows never to do that to games.",
+            GameWatcher.NoThrottleSetting),
+        SettingSwitch("High priority for games", WhileGaming,
+            "Gives running games High CPU priority, so browsers, launchers and updaters wait their turn instead of taking "
+            + "time from the game.",
+            GameWatcher.PrioritySetting),
+        new()
+        {
+            Name = GpuTweakName,
+            Group = WhileGaming,
+            Description = "Sets every game to High performance in Windows' graphics settings, so none of them can end up on the "
+                        + "built-in graphics by mistake. Games you install later get it the first time you play them.",
+            AppliesTo = hw => hw.HasDedicatedGpu && hw.HasIntegratedGpu,
+            IsOn = () => Settings.Get(GameWatcher.GpuSetting, false),
+            TurnOn = () =>
+            {
+                Settings.Set(GameWatcher.GpuSetting, true);
+                foreach (var exe in Games.Find().SelectMany(Games.Exes))
+                    GameWatcher.PreferDedicatedGpu(backup, exe);
+            },
+            TurnOff = () =>
+            {
+                Settings.Set(GameWatcher.GpuSetting, false);
+                backup.Undo(GpuTweakName);
+            },
         },
         RegistryTweak(backup, "Game Mode", WindowsSettings,
             "Windows' own gaming mode. It stops Windows Update installing drivers or showing restart prompts mid-game and "
