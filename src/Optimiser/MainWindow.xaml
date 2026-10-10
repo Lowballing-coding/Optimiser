@@ -141,6 +141,7 @@
                   <TextBlock x:Name="AllDone" Style="{StaticResource MutedText}" Visibility="Collapsed" Margin="0,0,0,8"
                              Text="Everything Optimiser recommends for this PC is on." />
                   <Button x:Name="ApplyAllButton" Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Margin="0,4,0,0"
+                          Visibility="Collapsed"
                           Content="Apply all recommended" Click="OnApplyAll" />
                 </StackPanel>
               </Border>

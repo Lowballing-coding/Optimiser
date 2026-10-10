@@ -28,37 +28,48 @@ public static partial class Games
             .OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)];
     }
 
-    // Steam keeps a list of library folders, and one appmanifest_<id>.acf per installed game in each.
-    public static IEnumerable<Game> Steam(string? steamPath)
+    // Steam keeps a list of library folders, and one appmanifest_<id>.acf per installed game in each. These and
+    // Epic's files are written by other programs, so one that's locked, half-written or odd is skipped, not fatal.
+    public static List<Game> Steam(string? steamPath)
     {
-        if (steamPath == null || !Directory.Exists(steamPath)) yield break;
+        var games = new List<Game>();
+        if (steamPath == null || !Directory.Exists(steamPath)) return games;
         var libraries = new List<string> { steamPath };
-        var list = Path.Combine(steamPath, "steamapps", "libraryfolders.vdf");
-        if (File.Exists(list))
-            libraries.AddRange(VdfValues(File.ReadAllText(list), "path"));
+        try { libraries.AddRange(VdfValues(File.ReadAllText(Path.Combine(steamPath, "steamapps", "libraryfolders.vdf")), "path")); }
+        catch { } // just the main library then
 
-        foreach (var library in libraries.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase))
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var library in libraries)
         {
-            var apps = Path.Combine(library, "steamapps");
-            if (!Directory.Exists(apps)) continue;
-            foreach (var manifest in Directory.EnumerateFiles(apps, "appmanifest_*.acf"))
+            try
             {
-                var text = File.ReadAllText(manifest);
-                var name = VdfValues(text, "name").FirstOrDefault();
-                var dir = VdfValues(text, "installdir").FirstOrDefault();
-                if (name == null || dir == null || SteamTool().IsMatch(name)) continue;
-                yield return new Game(name, Path.Combine(apps, "common", dir), "Steam");
+                var apps = Path.Combine(Path.GetFullPath(library), "steamapps");
+                if (!seen.Add(apps) || !Directory.Exists(apps)) continue;
+                foreach (var manifest in Directory.EnumerateFiles(apps, "appmanifest_*.acf"))
+                {
+                    try
+                    {
+                        var text = File.ReadAllText(manifest);
+                        var name = VdfValues(text, "name").FirstOrDefault();
+                        var dir = VdfValues(text, "installdir").FirstOrDefault();
+                        if (name != null && dir != null && !SteamTool().IsMatch(name))
+                            games.Add(new Game(name, Path.Combine(apps, "common", dir), "Steam"));
+                    }
+                    catch { }
+                }
             }
+            catch { } // a library on a drive that isn't plugged in
         }
+        return games;
     }
 
     // Epic writes one JSON .item file per install.
-    public static IEnumerable<Game> Epic(string manifests)
+    public static List<Game> Epic(string manifests)
     {
-        if (!Directory.Exists(manifests)) yield break;
+        var games = new List<Game>();
+        if (!Directory.Exists(manifests)) return games;
         foreach (var file in Directory.EnumerateFiles(manifests, "*.item"))
         {
-            Game? game = null;
             try
             {
                 using var json = JsonDocument.Parse(File.ReadAllText(file));
@@ -66,11 +77,11 @@ public static partial class Games
                 var isGame = !root.TryGetProperty("AppCategories", out var categories)
                              || categories.EnumerateArray().Any(c => c.GetString() == "games");
                 if (isGame && root.TryGetProperty("DisplayName", out var name) && root.TryGetProperty("InstallLocation", out var folder))
-                    game = new Game(name.GetString()!, Path.GetFullPath(folder.GetString()!), "Epic Games");
+                    games.Add(new Game(name.GetString()!, Path.GetFullPath(folder.GetString()!), "Epic Games"));
             }
-            catch (JsonException) { } // a half-written manifest; skip it
-            if (game != null) yield return game;
+            catch { }
         }
+        return games;
     }
 
     public static IEnumerable<Game> Added() =>
@@ -81,10 +92,13 @@ public static partial class Games
     public static string? Add(string folder)
     {
         var full = Path.GetFullPath(folder).TrimEnd('\\');
+        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows).TrimEnd('\\');
         var system = new[] { Environment.SpecialFolder.Windows, Environment.SpecialFolder.ProgramFiles,
-                             Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.UserProfile }
+                             Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.UserProfile,
+                             Environment.SpecialFolder.CommonApplicationData }
             .Select(f => Environment.GetFolderPath(f).TrimEnd('\\')).Where(f => f != "");
         if (Path.GetPathRoot(full)?.TrimEnd('\\') == full
+            || full.StartsWith(windows + "\\", StringComparison.OrdinalIgnoreCase)
             || system.Any(s => s.Equals(full, StringComparison.OrdinalIgnoreCase) || s.StartsWith(full + "\\", StringComparison.OrdinalIgnoreCase)))
             return "That folder has more than games in it. Choose the folder one game is installed in.";
         Settings.SetList(FoldersSetting, [.. Settings.GetList(FoldersSetting).Append(full).Distinct(StringComparer.OrdinalIgnoreCase)]);

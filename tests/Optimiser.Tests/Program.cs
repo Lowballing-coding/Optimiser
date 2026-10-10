@@ -110,7 +110,8 @@ Directory.CreateDirectory(epic);
 File.WriteAllText(Path.Combine(epic, "a.item"), """{ "DisplayName": "Fortnite", "InstallLocation": "C:\\Games\\Fortnite", "AppCategories": ["public", "games"] }""");
 File.WriteAllText(Path.Combine(epic, "b.item"), """{ "DisplayName": "Unreal Engine", "InstallLocation": "C:\\UE", "AppCategories": ["engines"] }""");
 File.WriteAllText(Path.Combine(epic, "c.item"), """{ "DisplayName": "Half writ""");
-Check(Games.Epic(epic).Select(g => g.Name).SequenceEqual(["Fortnite"]), "Epic games found, apps and broken manifests skipped");
+File.WriteAllText(Path.Combine(epic, "d.item"), """{ "DisplayName": "Odd", "InstallLocation": "", "AppCategories": "games" }""");
+Check(Games.Epic(epic).Select(g => g.Name).SequenceEqual(["Fortnite"]), "Epic games found, apps and broken or odd manifests skipped");
 
 List<Game> library = [new("Hades", @"C:\Games\Hades", "Steam")];
 Check(Games.ForExe(@"C:\Games\Hades\x64\Hades.exe", library)?.Name == "Hades", "a game's program is matched to the game");
@@ -120,7 +121,8 @@ Check(Games.ForExe(@"C:\Games\Hades\UnityCrashHandler64.exe", library) == null
       "crash reporters and anti-cheat aren't games");
 
 Check(Games.Add(@"C:\") != null && Games.Add(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)) != null
-      && Games.Add(Path.GetDirectoryName(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile))!) != null,
+      && Games.Add(Path.GetDirectoryName(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile))!) != null
+      && Games.Add(Environment.SystemDirectory) != null,
       "drives and system folders can't be added as games");
 var gameDir = Path.Combine(temp, "Fake Game");
 Directory.CreateDirectory(gameDir);

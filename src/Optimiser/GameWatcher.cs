@@ -45,27 +45,27 @@ public sealed class GameWatcher : IDisposable
         get { lock (running) return [.. running.Values.Select(g => g.Name).Distinct()]; }
     }
 
+    // Runs on a WMI thread. The profile switches under the same lock as the count, so a game starting just as
+    // another closes can't leave the power mode stuck on Best performance.
     void OnStart(uint pid)
     {
         if (ExePath(pid) is not { } exe) return;
-        Game? game;
-        bool first;
-        lock (running)
-        {
-            game = Optimiser.Games.ForExe(exe, games);
-            if (game == null || running.ContainsKey(pid)) return;
-            first = running.Count == 0;
-            running[pid] = game;
-        }
+        Game? game = null;
         try
         {
-            if (first) StartProfile();
+            lock (running)
+            {
+                game = Optimiser.Games.ForExe(exe, games);
+                if (game == null || running.ContainsKey(pid)) return;
+                running[pid] = game;
+                if (running.Count == 1) StartProfile();
+            }
             Tune(pid);
             if (Settings.Get(GpuSetting, false)) PreferDedicatedGpu(backup, exe); // ready for next launch
         }
         catch (Exception e)
         {
-            Warning?.Invoke($"Couldn't fully switch to the gaming profile for {game.Name}: {e.Message}");
+            Warning?.Invoke($"Couldn't fully switch to the gaming profile for {game?.Name}: {e.Message}");
         }
         Changed?.Invoke();
     }
@@ -79,13 +79,18 @@ public sealed class GameWatcher : IDisposable
 
     void OnStop(uint pid)
     {
-        bool last;
-        lock (running)
+        try
         {
-            if (!running.Remove(pid)) return;
-            last = running.Count == 0;
+            lock (running)
+            {
+                if (!running.Remove(pid)) return;
+                if (running.Count == 0) RestorePowerMode();
+            }
         }
-        if (last) RestorePowerMode();
+        catch (Exception e)
+        {
+            Warning?.Invoke($"Couldn't put your power mode back: {e.Message}");
+        }
         Changed?.Invoke();
     }
 
@@ -156,7 +161,7 @@ public sealed class GameWatcher : IDisposable
         stops.Stop();
         starts.Dispose();
         stops.Dispose();
-        RestorePowerMode();
+        lock (running) RestorePowerMode();
     }
 
     const uint ProcessSetInformation = 0x0200, ProcessQueryLimited = 0x1000, HighPriorityClass = 0x80;
