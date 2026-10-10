@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
@@ -118,7 +117,7 @@ public static class Rgb
     public static List<RgbApp> Find()
     {
         List<(string, string)> startApps;
-        try { startApps = StartApps(); }
+        try { startApps = StartMenu.Apps(); }
         catch { startApps = []; } // still list the apps Optimiser can reach
         var apps = Match(startApps, Lightings.Where(l => l.Missing == null));
         if (Environment.OSVersion.Version.Build >= 22631)
@@ -141,23 +140,6 @@ public static class Rgb
             else if (known.Lighting != null && reachable.Contains(known.Lighting)) apps.Add(new(known.Name, null, known.Lighting, known.Hint));
         }
         return apps;
-    }
-
-    // Every app in the Start menu, desktop and Store alike, with the ID Explorer opens it by.
-    static List<(string Name, string AppId)> StartApps()
-    {
-        const string script = "[Console]::OutputEncoding = [Text.Encoding]::UTF8; "
-                            + "Get-StartApps | ForEach-Object { $_.Name + \"`t\" + $_.AppID }";
-        using var p = Process.Start(new ProcessStartInfo(Tweaks.SystemExe(@"WindowsPowerShell\v1.0\powershell.exe"),
-            $"-NoProfile -EncodedCommand {Convert.ToBase64String(Encoding.Unicode.GetBytes(script))}")
-            { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true, StandardOutputEncoding = Encoding.UTF8 })!;
-        var output = p.StandardOutput.ReadToEndAsync();
-        if (!p.WaitForExit(15000))
-        {
-            p.Kill();
-            throw new TimeoutException("Windows took too long to list the Start menu.");
-        }
-        return [.. output.Result.Split('\n', StringSplitOptions.TrimEntries).Select(l => l.Split('\t')).Where(f => f.Length == 2).Select(f => (f[0], f[1]))];
     }
 
     // Lighting apps run small web servers on this PC. No proxy, and a short wait: they answer at once or not at all.

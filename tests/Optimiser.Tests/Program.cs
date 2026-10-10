@@ -216,6 +216,9 @@ Check(Logitech.InProgramFiles(Path.Combine(programFiles, @"LGHUB\sdks\sdk_legacy
       && !Logitech.InProgramFiles(Path.Combine(programFiles, @"..\Users\Public\x.dll"))
       && !Logitech.InProgramFiles(programFiles + @"Evil\x.dll"),
       "only loads the Logitech DLL from Program Files");
+var startMenu = StartMenu.Apps();
+Console.WriteLine($"{startMenu.Count} Start menu apps, e.g. {string.Join(", ", startMenu.Take(3))}");
+Check(startMenu.All(a => a.Name != "" && a.AppId != ""), "reads the Start menu without PowerShell");
 var rgbApps = Rgb.Match([("SteelSeries GG", "a"), ("Razer Synapse Uninstall", "b"), ("Razer Synapse", "c"), ("Notepad", "d"),
                          ("Wootility", "e\""), ("Wootility", "e")], [Rgb.LogitechGHub]);
 Check(rgbApps.Select(a => a.Name).SequenceEqual(["SteelSeries GG", "Razer Synapse", "Logitech G HUB", "Wootility"])
