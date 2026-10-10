@@ -88,7 +88,7 @@ public static class Updates
             throw;
         }
         if (AutoStart.IsInstalled(exe)) Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false })?.Dispose();
-        else Process.Start("explorer.exe", $"\"{exe}\"")?.Dispose();
+        else Tweaks.OpenAsYou(exe);
     }
 
     public static void CleanUp()

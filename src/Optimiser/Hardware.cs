@@ -6,7 +6,7 @@ namespace Optimiser;
 
 // What the app found on this PC. Tweaks use the flags at the bottom to decide whether they apply.
 public record Hardware(string Cpu, int PCores, int ECores, int Threads, string[] Gpus, double RamGb,
-                       string Maker, string Model, bool IsLaptop)
+                       string Maker, string Model, bool IsLaptop, DateTime? NvidiaDriverDate = null)
 {
     public bool HasNvidia => Gpus.Any(g => g.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase));
     public bool HasDedicatedGpu => Gpus.Any(IsDedicated);
@@ -35,7 +35,21 @@ public record Hardware(string Cpu, int PCores, int ECores, int Threads, string[]
             RamGb: Math.Round(installed / (double)(1L << 30)),
             Maker: First("Win32_ComputerSystem", "Manufacturer"),
             Model: First("Win32_ComputerSystem", "Model"),
-            IsLaptop: IsPortable());
+            IsLaptop: IsPortable(),
+            NvidiaDriverDate: NvidiaDriver());
+    }
+
+    static DateTime? NvidiaDriver()
+    {
+        try
+        {
+            using var search = new ManagementObjectSearcher("SELECT Name, DriverDate FROM Win32_VideoController");
+            return search.Get().Cast<ManagementBaseObject>()
+                .Where(o => o["Name"]?.ToString()?.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) == true && o["DriverDate"] is string)
+                .Select(o => (DateTime?)ManagementDateTimeConverter.ToDateTime((string)o["DriverDate"]))
+                .FirstOrDefault();
+        }
+        catch { return null; } // an odd date shouldn't stop the whole scan; the driver check just doesn't show
     }
 
     // Uses the chassis type, not "has a battery", because desktops on a USB UPS report a battery too.

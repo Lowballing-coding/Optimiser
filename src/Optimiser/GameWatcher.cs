@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
 namespace Optimiser;
@@ -169,8 +168,7 @@ public sealed class GameWatcher : IDisposable
     {
         var current = Reg.Read(GpuPreferences, exe) as string ?? "";
         if (current.Contains("GpuPreference=2;")) return;
-        var updated = Regex.Replace(current, @"GpuPreference=\d+;", "") + "GpuPreference=2;";
-        backup.Set(Tweaks.GpuTweakName, GpuPreferences, exe, updated, RegistryValueKind.String);
+        backup.Set(Tweaks.GpuTweakName, GpuPreferences, exe, Tweaks.WithFlag(current, "GpuPreference", 2), RegistryValueKind.String);
     }
 
     static string? ExePath(uint pid)

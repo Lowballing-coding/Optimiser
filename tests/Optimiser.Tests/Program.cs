@@ -164,6 +164,32 @@ Check(AutoStart.IsOn() && File.Exists(AutoStart.InstalledExe), "start with Windo
 AutoStart.TurnOff();
 Check(!AutoStart.IsOn() && !Directory.Exists(AutoStart.InstallFolder), "turning it off removes both");
 
+// Screens: reading refresh rates works, whatever the runner's screen offers.
+Check(Display.Screens().All(s => s.Hz > 1 && s.Hz <= s.MaxHz), "reads each screen's refresh rate");
+
+// Startup apps: stopping one writes Task Manager's "disabled" flag, and undo takes it away again.
+const string runKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+using (var k = Registry.CurrentUser.CreateSubKey(runKey))
+{
+    k.SetValue("OptimiserSelfTest", "\"C:\\SelfTest\\app.exe\" --tray");
+    k.SetValue("OptimiserSelfTestWindows", @"%windir%\system32\notepad.exe", RegistryValueKind.ExpandString);
+}
+var apps = StartupApps.Find();
+Check(apps.Any(a => a.Name == "OptimiserSelfTest") && apps.All(a => a.Name != "OptimiserSelfTestWindows"),
+    "lists startup apps but not Windows' own");
+var app = apps.First(a => a.Name == "OptimiserSelfTest");
+var stop = StartupApps.Tweak(backup, app);
+stop.TurnOn!();
+Check(stop.IsOn() && Registry.GetValue(app.ApprovedKey, app.ApprovedName, null) is byte[] { Length: 12 } flag && flag[0] == 3,
+    "stopping an app marks it disabled the way Task Manager does");
+stop.TurnOff!();
+Check(!stop.IsOn() && Registry.GetValue(app.ApprovedKey, app.ApprovedName, null) == null, "undo lets it start again");
+using (var k = Registry.CurrentUser.CreateSubKey(runKey))
+{
+    k.DeleteValue("OptimiserSelfTest");
+    k.DeleteValue("OptimiserSelfTestWindows");
+}
+
 // Updates: reads the version from the release title and only offers this repo's own download.
 const string release = """
     {"name": "Optimiser 1.0.12", "body": "Merge pull request #7 from Lowballing-coding/settings-updates\n\nSettings page\r\n",
