@@ -56,8 +56,8 @@ public partial class MainWindow : Window
         RestorePlacement();
         SourceInitialized += (_, _) =>
         {
-            // A pin made from the window starts the installed copy when background mode is on, else this one.
-            try { Taskbar.SetIdentity(new WindowInteropHelper(this).Handle, AutoStart.IsOn() ? AutoStart.InstalledExe : Environment.ProcessPath!); }
+            // A pin made from the window starts this copy. Updates replace it in place, so the pin keeps working.
+            try { Taskbar.SetIdentity(new WindowInteropHelper(this).Handle, Environment.ProcessPath!); }
             catch { } // only changes how the taskbar groups the window
         };
         Loaded += OnLoaded;
@@ -589,8 +589,10 @@ public partial class MainWindow : Window
             new GameRow(new Game("Cyberpunk 2077", @"D:\SteamLibrary\steamapps\common\Cyberpunk 2077", "Steam"), true, true),
             new GameRow(new Game("Fortnite", @"C:\Program Files\Epic Games\Fortnite", "Epic Games"), false, false),
         };
+        GameCount.Text = "2 games";
         GameCount.Visibility = Visibility.Visible;
         NoGames.Visibility = Visibility.Collapsed;
+        (GameStatus.Text, GameHint.Text, GameDot.Fill) = ("Gaming profile on", "Cyberpunk 2077 is running.", Paint("Good"));
         await Save("Games with a list");
         Sidebar.Width = SidebarOpen; // as it looks while hovered
         await Save("Sidebar");

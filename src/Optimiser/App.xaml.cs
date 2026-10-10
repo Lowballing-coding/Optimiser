@@ -67,7 +67,7 @@ public partial class App : Application
         try
         {
             Watcher = new GameWatcher(Backup);
-            Watcher.Changed += () => Dispatcher.InvokeAsync(OnGamesChanged);
+            Watcher.Changed += () => Dispatcher.InvokeAsync(() => OnGamesChanged());
             Watcher.Warning += message => Dispatcher.InvokeAsync(() => Notify(message, Forms.ToolTipIcon.Warning));
         }
         catch (Exception ex) { WatcherError = ex.Message; }
@@ -133,10 +133,11 @@ public partial class App : Application
         }
         catch (Exception e) { Notify($"Couldn't look for games: {e.Message}", Forms.ToolTipIcon.Warning); }
         GamesScanned = true;
-        OnGamesChanged();
+        OnGamesChanged(rescan: true);
     }
 
-    static void OnGamesChanged()
+    // rescan: a game can drop out of the running list because its switch was turned off, not because it closed.
+    static void OnGamesChanged(bool rescan = false)
     {
         var running = Watcher?.Running ?? [];
         // One notification per change, so the battery warning isn't replaced by the "on" one a moment later. In On
@@ -150,11 +151,11 @@ public partial class App : Application
             else if (automatic && Settings.Get(NotifySetting, true)) Notify(on.TrimEnd());
         }
         else if (running.Count == 0 && wasRunning.Count > 0 && automatic && Settings.Get(NotifySetting, true))
-            Notify($"Gaming profile off now that {string.Join(", ", wasRunning)} closed.");
+            Notify(rescan ? "Gaming profile off." : $"Gaming profile off now that {string.Join(", ", wasRunning)} closed.");
         wasRunning = running;
 
-        var text = CurrentMode == ProfileMode.On ? "Optimiser: gaming profile on"
-                 : running.Count == 0 ? "Optimiser" : $"Optimiser: gaming profile on for {string.Join(", ", running)}";
+        var text = running.Count > 0 ? $"Optimiser: gaming profile on for {string.Join(", ", running)}"
+                 : Watcher?.ProfileOn == true ? "Optimiser: gaming profile on" : "Optimiser";
         if (tray != null) tray.Text = text.Length > 127 ? text[..124] + "..." : text; // Windows' limit
         GamesChanged?.Invoke();
     }
@@ -163,6 +164,7 @@ public partial class App : Application
     // watching back on checks every running program.
     public static void SetProfileMode(ProfileMode mode)
     {
+        if (Watcher == null && mode != ProfileMode.Off) throw new InvalidOperationException($"Windows wouldn't report programs starting: {WatcherError}");
         if (Watcher != null) Watcher.Mode = mode;
         Settings.SetText(GameWatcher.ModeSetting, mode.ToString());
     }
@@ -171,7 +173,7 @@ public partial class App : Application
     {
         try { SetProfileMode(mode); }
         catch (Exception e) { Current.Dispatcher.InvokeAsync(() => Notify($"Couldn't change the gaming profile: {e.Message}", Forms.ToolTipIcon.Warning)); }
-        Current.Dispatcher.InvokeAsync(OnGamesChanged); // also when there's no watcher to say so
+        Current.Dispatcher.InvokeAsync(() => OnGamesChanged()); // also when there's no watcher to say so
     });
 
     public static async Task CheckForUpdates()
