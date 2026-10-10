@@ -169,10 +169,53 @@
         </StackPanel>
       </ScrollViewer>
 
-      <StackPanel x:Name="Games" Visibility="Collapsed" MaxWidth="640" HorizontalAlignment="Left">
-        <TextBlock Style="{StaticResource MutedText}" FontSize="15"
-                   Text="Game detection arrives in step 4. Optimiser will find your Steam and Epic games and switch to a gaming profile whenever one starts." />
-      </StackPanel>
+      <ScrollViewer x:Name="Games" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,0,0,28">
+          <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left"
+                     Text="Optimiser finds your Steam and Epic games by itself. While one is running it switches on the gaming profile from the Optimisations page, and puts your normal settings back when the game closes." />
+
+          <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                <Button Style="{StaticResource SecondaryButton}" Content="Scan again" Click="OnScanGames" />
+                <Button Style="{StaticResource AccentButton}" Content="Add a game folder" Margin="10,0,0,0" Click="OnAddGame" />
+              </StackPanel>
+              <Ellipse x:Name="GameDot" Width="10" Height="10" Margin="0,7,14,0" VerticalAlignment="Top" />
+              <StackPanel>
+                <TextBlock x:Name="GameStatus" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock x:Name="GameHint" Style="{StaticResource MutedText}" FontSize="13" Margin="0,4,0,0" MaxWidth="620"
+                           HorizontalAlignment="Left" />
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+          <TextBlock x:Name="GameCount" Style="{StaticResource GroupTitle}" />
+          <TextBlock x:Name="NoGames" Style="{StaticResource MutedText}" Visibility="Collapsed"
+                     Text="No games found yet. If you play something that isn't on Steam or Epic, add the folder it's installed in." />
+          <ItemsControl x:Name="GameList">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Style="{StaticResource Panel}" Padding="20,14" Margin="0,0,0,8">
+                  <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                      <Border Style="{StaticResource Badge}" Visibility="{Binding Running, Converter={StaticResource Vis}}">
+                        <TextBlock Text="Running" Foreground="{StaticResource Good}" />
+                      </Border>
+                      <Button Style="{StaticResource SecondaryButton}" Padding="14,6" Margin="10,0,0,0" Content="Remove"
+                              Click="OnRemoveGame" Visibility="{Binding Game.CanRemove, Converter={StaticResource Vis}}" />
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Text="{Binding Game.Name}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Game.Detail}" Style="{StaticResource MutedText}" FontSize="12.5" Margin="0,4,0,0"
+                                 TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding Game.Folder}" />
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
 
       <ScrollViewer x:Name="Stats" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="0,0,0,16">
