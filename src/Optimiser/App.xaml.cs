@@ -70,7 +70,6 @@ public partial class App : Application
         }
         catch (Exception ex) { WatcherError = ex.Message; }
         _ = ScanGames();
-        Rgb.Start(); // puts back the colour picked on the RGB page
 
         var icon = GetResourceStream(new Uri("pack://application:,,,/Assets/optimiser.ico")).Stream;
         tray = new Forms.NotifyIcon
@@ -91,6 +90,7 @@ public partial class App : Application
 
         if (!e.Args.Contains("--snapshot"))
         {
+            Rgb.Start(); // puts back the colour picked on the RGB page
             var twiceADay = new DispatcherTimer { Interval = TimeSpan.FromHours(12) };
             twiceADay.Tick += (_, _) => AutoCheck();
             twiceADay.Start();

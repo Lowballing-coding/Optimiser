@@ -217,10 +217,11 @@ Check(Logitech.InProgramFiles(Path.Combine(programFiles, @"LGHUB\sdks\sdk_legacy
       && !Logitech.InProgramFiles(programFiles + @"Evil\x.dll"),
       "only loads the Logitech DLL from Program Files");
 var rgbApps = Rgb.Match([("SteelSeries GG", "a"), ("Razer Synapse Uninstall", "b"), ("Razer Synapse", "c"), ("Notepad", "d"),
-                         ("Wootility", "e\""), ("Wootility", "e")]);
-Check(rgbApps.Select(a => a.Name).SequenceEqual(["SteelSeries GG", "Razer Synapse", "Wootility"])
-      && rgbApps[1] is { Open: @"shell:AppsFolder\c", Lighting: Razer } && rgbApps[2] is { Open: @"shell:AppsFolder\e", Lighting: null },
-      "finds RGB apps in the Start menu");
+                         ("Wootility", "e\""), ("Wootility", "e")], [Rgb.LogitechGHub]);
+Check(rgbApps.Select(a => a.Name).SequenceEqual(["SteelSeries GG", "Razer Synapse", "Logitech G HUB", "Wootility"])
+      && rgbApps[1] is { Open: @"shell:AppsFolder\c", Lighting: Razer } && rgbApps[2] is { Open: null, Lighting: Logitech }
+      && rgbApps[3] is { Open: @"shell:AppsFolder\e", Lighting: null },
+      "finds RGB apps in the Start menu, and ones Optimiser can reach that aren't in it");
 
 Directory.Delete(temp, true);
 Registry.CurrentUser.DeleteSubKeyTree(sub);

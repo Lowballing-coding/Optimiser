@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using Forms = System.Windows.Forms;
 
@@ -10,8 +11,11 @@ namespace Optimiser;
 public record RgbRow(RgbApp App, string Badge, Brush BadgeBrush, string Detail)
 {
     public bool CanOpen => App.Open != null;
-    public string OpenText => App.Open?.StartsWith("ms-settings:") == true ? "Open settings" : "Open";
+    public string OpenText => App.IsSetting ? "Open settings" : "Open";
 }
+
+// Lets the WinForms colour picker sit on top of Optimiser's window.
+record Owner(IntPtr Handle) : Forms.IWin32Window;
 
 public partial class RgbPage : UserControl
 {
@@ -60,11 +64,7 @@ public partial class RgbPage : UserControl
     {
         if (apps != null || looking) return;
         looking = true;
-        var found = await Task.Run(() =>
-        {
-            try { return Rgb.Find(); }
-            catch { return Rgb.Match([]); } // no Start menu list; still show the apps Optimiser can reach
-        });
+        var found = await Task.Run(Rgb.Find);
         looking = false;
         if (sample) return;
         apps = found;
@@ -100,7 +100,7 @@ public partial class RgbPage : UserControl
     RgbRow Row(RgbApp app, Color? want, RgbRound last)
     {
         if (app.Lighting == null)
-            return new(app, app.Open?.StartsWith("ms-settings:") == true ? "Windows setting" : "Open only", Paint("Muted"), app.Hint);
+            return new(app, app.IsSetting ? "Windows setting" : "Open only", Paint("Muted"), app.Hint);
         if (want == null || last.Colour != want) return new(app, "Can sync", Paint("Muted"), app.Hint);
         return last.Results.TryGetValue(app.Lighting, out var why) && why == null
             ? new(app, "Synced", Paint("Good"), app.Hint)
@@ -121,7 +121,7 @@ public partial class RgbPage : UserControl
         }
         var now = Rgb.Colour ?? Presets[0].Colour;
         using var dialog = new Forms.ColorDialog { FullOpen = true, Color = System.Drawing.Color.FromArgb(now.R, now.G, now.B) };
-        if (dialog.ShowDialog() == Forms.DialogResult.OK) Pick(Color.FromRgb(dialog.Color.R, dialog.Color.G, dialog.Color.B));
+        if (dialog.ShowDialog(new Owner(new WindowInteropHelper(Window.GetWindow(this)).Handle)) == Forms.DialogResult.OK) Pick(Color.FromRgb(dialog.Color.R, dialog.Color.G, dialog.Color.B));
     }
 
     void Pick(Color? c)
@@ -149,7 +149,7 @@ public partial class RgbPage : UserControl
     {
         sample = true;
         apps = Rgb.Match([("SteelSeries GG", "a"), ("Razer Synapse", "b"), ("Logitech G HUB", "c"), ("Wootility", "d"),
-                          ("Redragon K530RGB Pro", "e")]);
+                          ("Redragon K530RGB Pro", "e")], []);
         var orange = Presets[0].Colour;
         Show(orange, new(orange, new Dictionary<Lighting, string?>
         {

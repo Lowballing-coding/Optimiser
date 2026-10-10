@@ -10,7 +10,10 @@ using System.Windows.Media;
 namespace Optimiser;
 
 // An RGB app on this PC. Open is what Explorer opens for it; Lighting is how Optimiser sets its colour, if it can.
-public record RgbApp(string Name, string? Open, Lighting? Lighting, string Hint);
+public record RgbApp(string Name, string? Open, Lighting? Lighting, string Hint)
+{
+    public bool IsSetting => Open?.StartsWith("ms-settings:") == true;
+}
 
 // What the RGB thread did last time round: the colour (null: handed back to each app), and for each app, null if it
 // took the colour or why it didn't.
@@ -114,7 +117,10 @@ public static class Rgb
     // The RGB apps on this PC, plus Windows' own RGB settings on Windows 11 23H2 and later.
     public static List<RgbApp> Find()
     {
-        var apps = Match(StartApps());
+        List<(string, string)> startApps;
+        try { startApps = StartApps(); }
+        catch { startApps = []; } // still list the apps Optimiser can reach
+        var apps = Match(startApps, Lightings.Where(l => l.Missing == null));
         if (Environment.OSVersion.Version.Build >= 22631)
             apps.Add(new("Windows Dynamic Lighting", "ms-settings:personalization-lighting", null,
                 "Windows' own RGB control. When it's on it can take devices over from their apps, so if colours keep "
@@ -122,7 +128,8 @@ public static class Rgb
         return apps;
     }
 
-    public static List<RgbApp> Match(IEnumerable<(string Name, string AppId)> startApps)
+    // Known apps found in the Start menu, plus the ones Optimiser can reach that aren't in it.
+    public static List<RgbApp> Match(IEnumerable<(string Name, string AppId)> startApps, IEnumerable<Lighting> reachable)
     {
         var usable = startApps.Where(a => !Regex.IsMatch(a.Name, "uninstall|update|readme|help|manual", RegexOptions.IgnoreCase)
                                           && !a.AppId.Contains('"')).ToList();
@@ -131,7 +138,7 @@ public static class Rgb
         {
             var found = usable.FirstOrDefault(a => Regex.IsMatch(a.Name, known.Pattern, RegexOptions.IgnoreCase));
             if (found.Name != null) apps.Add(new(found.Name, $@"shell:AppsFolder\{found.AppId}", known.Lighting, known.Hint));
-            else if (known.Lighting is { Missing: null }) apps.Add(new(known.Name, null, known.Lighting, known.Hint));
+            else if (known.Lighting != null && reachable.Contains(known.Lighting)) apps.Add(new(known.Name, null, known.Lighting, known.Hint));
         }
         return apps;
     }
@@ -144,9 +151,13 @@ public static class Rgb
         using var p = Process.Start(new ProcessStartInfo(Tweaks.SystemExe(@"WindowsPowerShell\v1.0\powershell.exe"),
             $"-NoProfile -EncodedCommand {Convert.ToBase64String(Encoding.Unicode.GetBytes(script))}")
             { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true, StandardOutputEncoding = Encoding.UTF8 })!;
-        var output = p.StandardOutput.ReadToEnd();
-        p.WaitForExit();
-        return [.. output.Split('\n', StringSplitOptions.TrimEntries).Select(l => l.Split('\t')).Where(f => f.Length == 2).Select(f => (f[0], f[1]))];
+        var output = p.StandardOutput.ReadToEndAsync();
+        if (!p.WaitForExit(15000))
+        {
+            p.Kill();
+            throw new TimeoutException("Windows took too long to list the Start menu.");
+        }
+        return [.. output.Result.Split('\n', StringSplitOptions.TrimEntries).Select(l => l.Split('\t')).Where(f => f.Length == 2).Select(f => (f[0], f[1]))];
     }
 
     // Lighting apps run small web servers on this PC. No proxy, and a short wait: they answer at once or not at all.
@@ -186,6 +197,7 @@ public class SteelSeries : Lighting
     static readonly string[] Props = [Path.Combine(Data, @"SteelSeries\SteelSeries Engine 3\coreProps.json"),
                                       Path.Combine(Data, @"SteelSeries\GG\coreProps.json")];
     string? url; // GameSense's address, once Optimiser is signed up
+    int count;   // a fresh value each time, so GG never skips an event as a repeat
 
     public override string? Missing => Props.Any(File.Exists) ? null : "It isn't running.";
 
@@ -206,7 +218,7 @@ public class SteelSeries : Lighting
             Rgb.Send(HttpMethod.Post, url + "game_event", new Dictionary<string, object>
             {
                 ["game"] = Game, ["event"] = Event,
-                ["data"] = new { value = 1, frame = new { colour = new { red = c.R, green = c.G, blue = c.B } } },
+                ["data"] = new { value = count = count % 100 + 1, frame = new { colour = new { red = c.R, green = c.G, blue = c.B } } },
             });
         }
         catch
@@ -278,14 +290,18 @@ public class Razer : Lighting
             {
                 // A device type that isn't plugged in just answers with an error code, which is fine.
                 foreach (var device in Devices)
-                    Rgb.Send(HttpMethod.Put, $"{session}/{device}", new { effect = "CHROMA_STATIC", param = new { color = Bgr(c) } });
+                {
+                    try { Rgb.Send(HttpMethod.Put, $"{session}/{device}", new { effect = "CHROMA_STATIC", param = new { color = Bgr(c) } }); }
+                    catch (HttpRequestException e) when (e.StatusCode != null) { } // turned down, e.g. none of that kind plugged in
+                }
                 shown = c;
             }
             Rgb.Send(HttpMethod.Put, session + "/heartbeat");
         }
         catch
         {
-            session = null;
+            try { Release(); } // don't leave a stray session holding Chroma
+            catch { session = null; }
             throw;
         }
     }
@@ -320,8 +336,9 @@ public class Logitech : Lighting
     static readonly string ProgramFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
     bool started;
 
-    static Logitech() => NativeLibrary.SetDllImportResolver(typeof(Logitech).Assembly,
-        (name, _, _) => name == Lib && Dll() is { } dll ? NativeLibrary.Load(dll) : IntPtr.Zero);
+    // Never falls back to Windows' usual search for Lib, which looks next to Optimiser.exe first.
+    static Logitech() => NativeLibrary.SetDllImportResolver(typeof(Logitech).Assembly, (name, _, _) =>
+        name != Lib ? IntPtr.Zero : NativeLibrary.Load(Dll() ?? throw new DllNotFoundException("G HUB's lighting add-on for games wasn't found.")));
 
     public override string? Missing => Dll() != null ? null : "G HUB's lighting add-on for games wasn't found.";
 
