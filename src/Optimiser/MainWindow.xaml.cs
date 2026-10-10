@@ -42,6 +42,8 @@ public partial class MainWindow : Window
     const string PlacementSetting = "WindowPlacement";
     bool busy, toldAboutTray;
     readonly List<RadioButton> modeButtons = [];
+    List<Row> rows = [];        // every optimisation on the Optimisations page, as last drawn
+    List<SetRow> setRows = [];
     Stats? stats;
     readonly DispatcherTimer statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     readonly StatTile gpuTemp = new("GPU temperature", showTrend: true), gpuLoad = new("GPU load", showTrend: true),
@@ -147,7 +149,8 @@ public partial class MainWindow : Window
         UpdateSettings.ItemsSource = settings.Where(r => r.Item.Group == Tweaks.UpdatesGroup).ToList();
         ProfileSettings.ItemsSource = settings.Where(r => r.Item.Group != Tweaks.UpdatesGroup).ToList();
         if (App.Hardware == null) return;
-        var rows = Tweaks.All(App.Backup).Where(o => o.AppliesTo(App.Hardware)).Select(ToRow).ToList();
+        rows = Tweaks.All(App.Backup).Where(o => o.AppliesTo(App.Hardware)).Select(ToRow).ToList();
+        SetList.ItemsSource = setRows = [.. Sets.Load().Select(s => new SetRow(s.Name, [.. SetCandidates.Where(r => s.Items.Contains(r.Name))]))];
 
         var scored = rows.Where(r => r.Item.CountsToScore).ToList();
         var score = scored.Count == 0 ? 100 : 100 * scored.Count(r => r.On) / scored.Count;
@@ -260,16 +263,64 @@ public partial class MainWindow : Window
     {
         var todo = Tweaks.All(App.Backup)
             .Where(o => o.AppliesTo(App.Hardware) && o.CountsToScore && o.TurnOn != null && !o.IsOn()).ToList();
+        await FlipAll(todo, true, $"Applying {todo.Count} optimisations…", $"Applied {todo.Count} optimisations.");
+    }
+
+    // One failing doesn't stop the rest.
+    async Task FlipAll(List<Optimisation> todo, bool on, string doing, string done)
+    {
         var failed = new List<string>();
-        await Change($"Applying {todo.Count} optimisations…", () =>
+        await Change(doing, () =>
         {
             foreach (var o in todo)
             {
-                try { Flip(o, true); }
+                try { Flip(o, on); }
                 catch (Exception ex) { failed.Add($"{o.Name} ({ex.Message})"); }
             }
-        }, $"Applied {todo.Count} optimisations.");
-        if (failed.Count > 0) StatusText.Text += $" Some couldn't be applied: {string.Join(", ", failed)}.";
+        }, done);
+        if (failed.Count > 0) StatusText.Text += $" Some couldn't be turned {(on ? "on" : "off")}: {string.Join(", ", failed)}.";
+    }
+
+    // What a set can hold: any switch except running in the background, which the gaming profile itself needs.
+    IEnumerable<Row> SetCandidates => rows.Where(r => r.IsSwitch && r.Name != Tweaks.BackgroundName);
+
+    async void OnSetSwitch(object sender, RoutedEventArgs e)
+    {
+        var box = (CheckBox)sender;
+        var set = (SetRow)box.DataContext;
+        var on = box.IsChecked == true;
+        var todo = Sets.ToFlip(set, setRows, on);
+        var kept = on ? [] : set.Rows.Where(r => r.On && !todo.Contains(r)).Select(r => r.Name).ToList();
+        await FlipAll([.. todo.Select(r => r.Item)], on, $"Turning {(on ? "on" : "off")} {set.Name}…",
+            $"Turned {(on ? "on" : "off")} {set.Name}." + (kept.Count == 0 ? ""
+                : $" {string.Join(", ", kept)} stayed on, because another set that's on has {(kept.Count == 1 ? "it" : "them")} or Windows already had {(kept.Count == 1 ? "it" : "them")} on."));
+    }
+
+    async void OnSaveSet(object sender, RoutedEventArgs e)
+    {
+        var name = SetName.Text.Trim();
+        var items = SetCandidates.Where(r => r.On).Select(r => r.Name).ToList();
+        if (name.Length == 0)
+        {
+            StatusText.Text = "Type a name for the set first, like Gaming.";
+            SetName.Focus();
+        }
+        else if (items.Count == 0) StatusText.Text = "Nothing is switched on yet. Turn on what you want in the set, then save it.";
+        else if (await Change($"Saving {name}…", () => Sets.Save(name, items), $"Saved {name} with {items.Count} optimisation{(items.Count == 1 ? "" : "s")}."))
+            SetName.Clear();
+    }
+
+    void OnSetNameKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        OnSaveSet(sender, e);
+    }
+
+    async void OnDeleteSet(object sender, RoutedEventArgs e)
+    {
+        var set = (SetRow)((FrameworkElement)sender).DataContext;
+        await Change($"Deleting {set.Name}…", () => Sets.Delete(set.Name), $"Deleted {set.Name}. Its optimisations stay as they are.");
     }
 
     RadioButton[] NavButtons => [.. Nav.Children.OfType<RadioButton>(), SettingsNav];
@@ -594,6 +645,10 @@ public partial class MainWindow : Window
         NoGames.Visibility = Visibility.Collapsed;
         (GameStatus.Text, GameHint.Text, GameDot.Fill) = ("Gaming profile on", "Cyberpunk 2077 is running.", Paint("Good"));
         await Save("Games with a list");
+        ((RadioButton)Nav.Children[1]).IsChecked = true;
+        var sample = SetCandidates.ToList();
+        SetList.ItemsSource = new[] { new SetRow("Gaming", sample), new SetRow("Everyday", [.. sample.Take(2)]) };
+        await Save("Optimisations with sets");
         Sidebar.Width = SidebarOpen; // as it looks while hovered
         await Save("Sidebar");
         App.Quit();

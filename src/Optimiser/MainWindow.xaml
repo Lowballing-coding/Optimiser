@@ -87,6 +87,37 @@
       </Setter>
     </Style>
 
+    <!-- Text box with a hint shown while it's empty (the hint goes in Tag) -->
+    <Style x:Key="Field" TargetType="TextBox">
+      <Setter Property="Foreground" Value="{StaticResource Text}" />
+      <Setter Property="CaretBrush" Value="{StaticResource Text}" />
+      <Setter Property="SelectionBrush" Value="{StaticResource Accent}" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Border x:Name="Box" Background="{StaticResource Bg}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                    CornerRadius="6" Padding="8,7">
+              <Grid>
+                <TextBlock x:Name="Hint" Text="{TemplateBinding Tag}" Foreground="{StaticResource Muted}" Margin="2,0,0,0"
+                           Visibility="Collapsed" IsHitTestVisible="False" />
+                <ScrollViewer x:Name="PART_ContentHost" />
+              </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="Text" Value="">
+                <Setter TargetName="Hint" Property="Visibility" Value="Visible" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <!-- Status word for checks Optimiser can only detect -->
     <Style x:Key="CheckStatus" TargetType="TextBlock">
       <Setter Property="VerticalAlignment" Value="Center" />
@@ -126,6 +157,25 @@
               </Border>
             </StackPanel>
             <TextBlock Text="{Binding Description}" Style="{StaticResource MutedText}" FontSize="13" Margin="0,6,0,0"
+                       MaxWidth="720" HorizontalAlignment="Left" LineHeight="19" />
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </DataTemplate>
+
+    <!-- One optimisation set on the Optimisations page -->
+    <DataTemplate x:Key="SetCard">
+      <Border Style="{StaticResource Panel}" Padding="20,16" Margin="0,0,0,10">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
+            <Button Content="Delete" Style="{StaticResource SecondaryButton}" Padding="14,6" Margin="0,0,16,0" Click="OnDeleteSet"
+                    AutomationProperties.Name="{Binding Name, StringFormat=Delete {0}}" />
+            <CheckBox Style="{StaticResource Switch}" IsChecked="{Binding On, Mode=OneWay}" Click="OnSetSwitch"
+                      ToolTip="Turn everything in this set on or off" AutomationProperties.Name="{Binding Name}" />
+          </StackPanel>
+          <StackPanel>
+            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15" />
+            <TextBlock Text="{Binding Summary}" Style="{StaticResource MutedText}" FontSize="13" Margin="0,6,0,0"
                        MaxWidth="720" HorizontalAlignment="Left" LineHeight="19" />
           </StackPanel>
         </DockPanel>
@@ -279,6 +329,25 @@
         <StackPanel Margin="0,0,14,28">
           <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left"
                      Text="Only the optimisations that fit this PC are shown. Every switch saves the original setting first, so turning it off puts things back exactly as they were." />
+
+          <TextBlock Style="{StaticResource GroupTitle}" Text="Sets" />
+          <ItemsControl x:Name="SetList" ItemTemplate="{StaticResource SetCard}" />
+          <Border Style="{StaticResource Panel}" Padding="20,16">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
+                <TextBox x:Name="SetName" Style="{StaticResource Field}" Width="190" MaxLength="40" Tag="Name, like Gaming"
+                         AutomationProperties.Name="Set name" KeyDown="OnSetNameKey" />
+                <Button Style="{StaticResource AccentButton}" Content="Save set" Margin="10,0,0,0" Click="OnSaveSet" />
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="Save what's on now as a set" FontWeight="SemiBold" FontSize="15" />
+                <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="0,6,0,0" MaxWidth="620" HorizontalAlignment="Left"
+                           LineHeight="19"
+                           Text="Puts the switches below that are on right now into one set, so a single switch turns them all on or off. Saving with a name you already have updates that set." />
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
           <StackPanel x:Name="Groups" />
         </StackPanel>
       </ScrollViewer>

@@ -209,7 +209,7 @@ public static class Tweaks
     // Shown on both the Optimisations and Settings pages.
     static Optimisation Background(string group) => new()
     {
-        Name = "Run in the background and start with Windows",
+        Name = BackgroundName,
         Group = group,
         Description = "The gaming profile only works while Optimiser is running. This starts it in the system tray when you "
                     + "sign in, without a UAC prompt, and closing the window leaves it running there.",
@@ -219,6 +219,7 @@ public static class Tweaks
     };
 
     public const string GamingProfile = "Gaming profile", UpdatesGroup = "Updates";
+    public const string BackgroundName = "Run in the background and start with Windows";
 
     // The Settings page: how Optimiser itself behaves. Not part of the score. The gaming profile's mode has its own
     // Automatic / On / Off picker above these.
