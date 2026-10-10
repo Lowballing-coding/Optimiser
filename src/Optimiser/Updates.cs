@@ -47,6 +47,8 @@ public static class Updates
 
     // Downloads next to the running exe, swaps the files (Windows lets a running exe be renamed, just not
     // overwritten) and starts the new one, which closes this one. The leftover .old file goes on the next start.
+    // The copy in Program Files restarts straight away. Anywhere else, like Downloads, any program could swap the
+    // file before it starts, so it opens through Explorer and Windows asks first, as when you open it yourself.
     public static async Task Install(Release release, IProgress<int> progress)
     {
         var exe = Environment.ProcessPath!;
@@ -85,7 +87,8 @@ public static class Updates
             File.Move(old, exe);
             throw;
         }
-        Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false })?.Dispose();
+        if (AutoStart.IsInstalled(exe)) Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false })?.Dispose();
+        else Process.Start("explorer.exe", $"\"{exe}\"")?.Dispose();
     }
 
     public static void CleanUp()

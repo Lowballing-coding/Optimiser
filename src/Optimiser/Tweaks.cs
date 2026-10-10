@@ -152,8 +152,8 @@ public static class Tweaks
 
     static void SetGamingProfile(bool on)
     {
+        if (App.Watcher != null) App.Watcher.Enabled = on; // first, so a WMI failure doesn't save a setting that isn't working
         Settings.Set(GameWatcher.EnabledSetting, on);
-        if (App.Watcher != null) App.Watcher.Enabled = on;
     }
 
     // A switch made of registry values. On = every value already matches; off = undo from the backup.

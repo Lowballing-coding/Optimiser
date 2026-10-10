@@ -45,15 +45,16 @@ public sealed class GameWatcher : IDisposable
         set
         {
             if (value == enabled) return;
-            enabled = value;
             if (value)
             {
                 starts.Start();
                 stops.Start();
+                enabled = true;
                 CheckRunning();
             }
             else
             {
+                enabled = false;
                 starts.Stop(); // outside the lock: Stop waits for event handlers, which take it
                 stops.Stop();
                 lock (running)

@@ -459,14 +459,15 @@ public partial class MainWindow : Window
         try
         {
             await Task.Run(() => Updates.Install(update, progress));
-            StatusText.Text = $"Starting Optimiser {update.Version}…"; // it closes this one
+            StatusText.Text = $"Installed Optimiser {update.Version}. It opens in a moment and closes this one.";
+            CheckButton.IsEnabled = true;
         }
         catch (Exception ex)
         {
             StatusText.Text = $"Couldn't install the update: {ex.Message}";
             CheckButton.IsEnabled = InstallButton.IsEnabled = true;
-            busy = false;
         }
+        busy = false;
     }
 
     // explorer.exe opens the browser as you rather than as admin.
