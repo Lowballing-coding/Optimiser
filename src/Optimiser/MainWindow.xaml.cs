@@ -529,6 +529,9 @@ public partial class MainWindow : Window
         }
         ShowUpdate(new Release(new Version(1, 0, 99), "", 0, null, "Settings page with update checks\nRemembers where you left the window"));
         await Save("Settings with an update");
+        RGB.ShowSample();
+        RgbNav.IsChecked = true;
+        await Save("RGB with apps found");
         Sidebar.Width = SidebarOpen; // as it looks while hovered
         await Save("Sidebar");
         App.Quit();

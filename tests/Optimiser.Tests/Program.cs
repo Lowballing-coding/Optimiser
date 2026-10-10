@@ -202,6 +202,26 @@ Check(Updates.Parse(release, new Version(1, 0, 12)) == null, "no update when alr
 Check(Updates.Parse(release.Replace("Lowballing-coding/Optimiser/releases", "someone/else/releases"), new Version(1, 0, 9)) == null,
     "ignores a download from anywhere else");
 
+// RGB: Optimiser only talks to lighting apps on this PC and only loads G HUB's DLL from Program Files.
+Check(SteelSeries.Address("""{"address": "127.0.0.1:51248", "encryptedAddress": "127.0.0.1:51249"}""") == "http://127.0.0.1:51248/"
+      && SteelSeries.Address("""{"address": "example.com:80"}""") == null && SteelSeries.Address("half wr") == null,
+      "uses GameSense's address only if it's on this PC");
+Check(Razer.Session("""{"sessionid": 3486, "uri": "http://localhost:55235/chromasdk"}""") == "http://localhost:55235/chromasdk"
+      && Razer.Session("""{"sessionid": 1, "uri": "http://example.com/chromasdk"}""") == null,
+      "uses Razer Chroma's session address only if it's on this PC");
+Check(Razer.Bgr(System.Windows.Media.Color.FromRgb(0xFF, 0x8A, 0x1F)) == 0x1F8AFF, "Razer colours are blue, green, red");
+var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+Check(Logitech.InProgramFiles(Path.Combine(programFiles, @"LGHUB\sdks\sdk_legacy_led_x64.dll"))
+      && !Logitech.InProgramFiles(@"C:\Users\Public\sdk_legacy_led_x64.dll")
+      && !Logitech.InProgramFiles(Path.Combine(programFiles, @"..\Users\Public\x.dll"))
+      && !Logitech.InProgramFiles(programFiles + @"Evil\x.dll"),
+      "only loads the Logitech DLL from Program Files");
+var rgbApps = Rgb.Match([("SteelSeries GG", "a"), ("Razer Synapse Uninstall", "b"), ("Razer Synapse", "c"), ("Notepad", "d"),
+                         ("Wootility", "e\""), ("Wootility", "e")]);
+Check(rgbApps.Select(a => a.Name).SequenceEqual(["SteelSeries GG", "Razer Synapse", "Wootility"])
+      && rgbApps[1] is { Open: @"shell:AppsFolder\c", Lighting: Razer } && rgbApps[2] is { Open: @"shell:AppsFolder\e", Lighting: null },
+      "finds RGB apps in the Start menu");
+
 Directory.Delete(temp, true);
 Registry.CurrentUser.DeleteSubKeyTree(sub);
 Console.WriteLine("All checks passed");

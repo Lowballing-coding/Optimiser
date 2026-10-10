@@ -70,6 +70,7 @@ public partial class App : Application
         }
         catch (Exception ex) { WatcherError = ex.Message; }
         _ = ScanGames();
+        Rgb.Start(); // puts back the colour picked on the RGB page
 
         var icon = GetResourceStream(new Uri("pack://application:,,,/Assets/optimiser.ico")).Stream;
         tray = new Forms.NotifyIcon

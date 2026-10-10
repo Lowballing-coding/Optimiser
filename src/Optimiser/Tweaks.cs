@@ -201,7 +201,12 @@ public static class Tweaks
     }
 
     // Through Explorer, so a browser or app opens as you rather than with Optimiser's admin rights.
-    public static void OpenAsYou(string target) => Process.Start("explorer.exe", $"\"{target}\"")?.Dispose();
+    public static void OpenAsYou(string target) => Process.Start(Path.Combine(WindowsDir, "explorer.exe"), $"\"{target}\"")?.Dispose();
+
+    // Windows' own programs by full path: a bare name is looked for next to Optimiser.exe first, and a download
+    // sits in a folder any program can write to.
+    static readonly string WindowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+    public static string SystemExe(string exe) => Path.Combine(Environment.SystemDirectory, exe);
 
     const uint SetMouse = 0x0004, SendChange = 0x02;
     [DllImport("user32.dll")] static extern bool SystemParametersInfo(uint action, uint param, int[] values, uint flags);
@@ -292,7 +297,7 @@ public static class Tweaks
 
     public static void Run(string exe, string arguments)
     {
-        using var p = Process.Start(new ProcessStartInfo(exe, arguments) { CreateNoWindow = true, UseShellExecute = false });
+        using var p = Process.Start(new ProcessStartInfo(SystemExe(exe), arguments) { CreateNoWindow = true, UseShellExecute = false });
         p?.WaitForExit(15000);
     }
 
@@ -302,7 +307,7 @@ public static class Tweaks
     {
         const string script = "$a = Get-StartApps | Where-Object Name -like 'MSI Center*' | Select-Object -First 1; "
                             + "if ($a) { Start-Process ('shell:AppsFolder\\' + $a.AppID) } else { exit 1 }";
-        using var p = Process.Start(new ProcessStartInfo("powershell.exe",
+        using var p = Process.Start(new ProcessStartInfo(SystemExe(@"WindowsPowerShell\v1.0\powershell.exe"),
             $"-NoProfile -EncodedCommand {Convert.ToBase64String(Encoding.Unicode.GetBytes(script))}")
             { CreateNoWindow = true, UseShellExecute = false })!;
         if (!p.WaitForExit(15000)) return; // still starting; it'll open MSI Center when it gets there
