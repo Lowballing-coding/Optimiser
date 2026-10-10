@@ -175,8 +175,9 @@ using (var k = Registry.CurrentUser.CreateSubKey(runKey))
     k.SetValue("OptimiserSelfTestWindows", @"%windir%\system32\notepad.exe", RegistryValueKind.ExpandString);
 }
 var apps = StartupApps.Find();
-StartupApp app = apps.FirstOrDefault(a => a.Name == "OptimiserSelfTest")!;
-Check(app != null && apps.All(a => a.Name != "OptimiserSelfTestWindows"), "lists startup apps but not Windows' own");
+Check(apps.Any(a => a.Name == "OptimiserSelfTest") && apps.All(a => a.Name != "OptimiserSelfTestWindows"),
+    "lists startup apps but not Windows' own");
+var app = apps.First(a => a.Name == "OptimiserSelfTest");
 var stop = StartupApps.Tweak(backup, app);
 stop.TurnOn!();
 Check(stop.IsOn() && Registry.GetValue(app.ApprovedKey, app.ApprovedName, null) is byte[] { Length: 12 } flag && flag[0] == 3,
