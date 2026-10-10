@@ -69,6 +69,15 @@ Check(Fake("AMD Radeon(TM) Graphics", "AMD Radeon RX 6800M") is { HasIntegratedG
       "AMD integrated and dedicated told apart");
 Check(Fake("Intel(R) Arc(TM) A770 Graphics") is { HasDedicatedGpu: true, HasIntegratedGpu: false }, "Intel Arc card is dedicated");
 
+// Live readings work without an Nvidia driver too (CI has none).
+using (var stats = new Stats())
+{
+    Thread.Sleep(200);
+    var reading = stats.Read();
+    Console.WriteLine(reading);
+    Check(reading.RamTotalGb > 0 && reading.RamUsedGb > 0 && reading.CpuLoad is >= 0 and <= 100, "live readings");
+}
+
 var hw = Hardware.Detect();
 Console.WriteLine(hw);
 Check(hw.Cpu != "Unknown" && hw.PCores > 0 && hw.RamGb > 0 && hw.Gpus.Length > 0, "hardware detected");

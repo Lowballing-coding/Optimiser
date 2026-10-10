@@ -174,10 +174,12 @@
                    Text="Game detection arrives in step 4. Optimiser will find your Steam and Epic games and switch to a gaming profile whenever one starts." />
       </StackPanel>
 
-      <StackPanel x:Name="Stats" Visibility="Collapsed" MaxWidth="640" HorizontalAlignment="Left">
-        <TextBlock Style="{StaticResource MutedText}" FontSize="15"
-                   Text="Live temperatures, usage and clock speeds arrive in step 3." />
-      </StackPanel>
+      <ScrollViewer x:Name="Stats" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,0,0,16">
+          <TextBlock x:Name="StatsIntro" Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left" />
+          <UniformGrid x:Name="Tiles" Columns="3" Margin="-6,20,-6,0" />
+        </StackPanel>
+      </ScrollViewer>
 
       <DockPanel x:Name="Backups" Visibility="Collapsed">
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,20">
