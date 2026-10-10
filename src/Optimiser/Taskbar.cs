@@ -19,8 +19,7 @@ public static class Taskbar
             Set(store, RelaunchCommand, $"\"{exe}\"");
             Set(store, RelaunchIcon, $"{exe},0");
             Set(store, RelaunchName, "Optimiser");
-            Set(store, Id, AppId);
-            Marshal.ThrowExceptionForHR(store.Commit());
+            Set(store, Id, AppId); // last: setting it makes the taskbar read the others
         }
         finally { Marshal.ReleaseComObject(store); }
     }

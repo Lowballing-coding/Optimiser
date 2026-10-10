@@ -191,8 +191,14 @@ using (var k = Registry.CurrentUser.OpenSubKey(gpuKey, writable: true)!) k.Delet
 // Start with Windows: a copy of the app somewhere only admins can change, started by a logon task.
 AutoStart.TaskName = "OptimiserSelfTest";
 AutoStart.InstallFolder = Path.Combine(temp, "Installed");
-AutoStart.TurnOn(fakeGame);
+var unversioned = Path.Combine(temp, "Unversioned.exe");
+File.WriteAllText(unversioned, "an older build");
+AutoStart.TurnOn(unversioned);
 Check(AutoStart.IsOn() && File.Exists(AutoStart.InstalledExe), "start with Windows installs a copy and adds the task");
+AutoStart.TurnOn(fakeGame);
+Check(new FileInfo(AutoStart.InstalledExe).Length == new FileInfo(fakeGame).Length, "a newer copy replaces the installed one");
+AutoStart.TurnOn(unversioned);
+Check(new FileInfo(AutoStart.InstalledExe).Length == new FileInfo(fakeGame).Length, "an older copy doesn't roll it back");
 AutoStart.TurnOff();
 Check(!AutoStart.IsOn() && !Directory.Exists(AutoStart.InstallFolder), "turning it off removes both");
 
