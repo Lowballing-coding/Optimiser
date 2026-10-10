@@ -100,6 +100,7 @@ public partial class App : Application
 
         if (!e.Args.Contains("--snapshot"))
         {
+            Rgb.Start(); // puts back the colour picked on the RGB page
             var twiceADay = new DispatcherTimer { Interval = TimeSpan.FromHours(12) };
             twiceADay.Tick += (_, _) => AutoCheck();
             twiceADay.Start();

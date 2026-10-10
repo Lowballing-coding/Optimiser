@@ -180,6 +180,7 @@
             <RadioButton Style="{StaticResource Nav}" Content="&#xE7FC;" Tag="Games" Checked="OnNav" />
             <RadioButton Style="{StaticResource Nav}" Content="&#xE9D9;" Tag="Stats" Checked="OnNav" />
             <RadioButton Style="{StaticResource Nav}" Content="&#xE81C;" Tag="Backups" Checked="OnNav" />
+            <RadioButton x:Name="RgbNav" Style="{StaticResource Nav}" Content="&#xE790;" Tag="RGB" Checked="OnNav" />
           </StackPanel>
         </DockPanel>
       </Border>
@@ -375,6 +376,8 @@
         </Grid>
       </DockPanel>
 
+      <local:RgbPage x:Name="RGB" Visibility="Collapsed" />
+
       <ScrollViewer x:Name="Settings" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="0,0,14,28">
           <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left"
@@ -420,7 +423,7 @@
           <ItemsControl x:Name="ProfileSettings" ItemTemplate="{StaticResource RowCard}" />
 
           <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="2,16,0,0">
-            Tip: Ctrl+1 to Ctrl+6 jump straight to each page.
+            Tip: Ctrl+1 to Ctrl+7 jump straight to each page.
             <Hyperlink Click="OnOpenGitHub" Foreground="{StaticResource Accent}">See every change on GitHub</Hyperlink>
           </TextBlock>
         </StackPanel>

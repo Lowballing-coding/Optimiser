@@ -594,6 +594,9 @@ public partial class MainWindow : Window
         NoGames.Visibility = Visibility.Collapsed;
         (GameStatus.Text, GameHint.Text, GameDot.Fill) = ("Gaming profile on", "Cyberpunk 2077 is running.", Paint("Good"));
         await Save("Games with a list");
+        RGB.ShowSample();
+        RgbNav.IsChecked = true;
+        await Save("RGB with apps found");
         Sidebar.Width = SidebarOpen; // as it looks while hovered
         await Save("Sidebar");
         App.Quit();
