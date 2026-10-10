@@ -6,13 +6,16 @@ using Microsoft.Win32;
 
 namespace Optimiser;
 
+// Automatic: on while a game is running. On: on until you switch it back. Off: never.
+public enum ProfileMode { Automatic, On, Off }
+
 // Waits for Windows' process start/stop events (no polling) and switches the gaming profile on while any game
 // from the Games list is running, then puts the power mode back when the last one closes.
 public sealed class GameWatcher : IDisposable
 {
     public const string PowerModeSetting = "GamingPowerMode", PrioritySetting = "GamingPriority",
         NoThrottleSetting = "GamingNoThrottle", GpuSetting = "GamingGpuPreference", SavedPowerMode = "PowerModeBeforeGaming",
-        EnabledSetting = "GamingProfile";
+        ModeSetting = "GamingProfileMode", OldEnabledSetting = "GamingProfile";
     public const string GpuPreferences = @"HKEY_CURRENT_USER\Software\Microsoft\DirectX\UserGpuPreferences";
     static readonly Guid BestPerformance = new("ded574b5-45a0-4f42-8737-46345c09c238");
 
@@ -20,8 +23,10 @@ public sealed class GameWatcher : IDisposable
     readonly ManagementEventWatcher starts = new(new EventQuery("SELECT ProcessID FROM Win32_ProcessStartTrace"));
     readonly ManagementEventWatcher stops = new(new EventQuery("SELECT ProcessID FROM Win32_ProcessStopTrace"));
     readonly Dictionary<uint, Game> running = [];
+    readonly object switching = new();
     List<Game> games = [];
-    volatile bool enabled;
+    volatile ProfileMode mode;
+    bool profileOn; // under the running lock
 
     public event Action? Changed;            // a game started or stopped
     public event Action<string>? Warning;     // something went wrong, worth a tray notification
@@ -31,45 +36,70 @@ public sealed class GameWatcher : IDisposable
         this.backup = backup;
         starts.EventArrived += (_, e) => OnStart((uint)e.NewEvent["ProcessID"]);
         stops.EventArrived += (_, e) => OnStop((uint)e.NewEvent["ProcessID"]);
-        enabled = Settings.Get(EnabledSetting, true);
-        if (!enabled) return;
-        starts.Start();
-        stops.Start();
+        mode = SavedMode;
+        if (mode != ProfileMode.Off)
+        {
+            starts.Start();
+            stops.Start();
+        }
+        lock (running) Sync();
     }
 
-    // Off pauses the gaming profile: stops watching and puts the power mode back.
-    public bool Enabled
+    // The mode chosen last time. Versions before modes had an on/off switch, which maps to Automatic or Off.
+    public static ProfileMode SavedMode =>
+        Enum.TryParse<ProfileMode>(Settings.GetText(ModeSetting), out var saved) ? saved
+        : Settings.Get(OldEnabledSetting, true) ? ProfileMode.Automatic : ProfileMode.Off;
+
+    // Games are still watched in On mode, so one that starts gets high priority and the other per-game changes.
+    public ProfileMode Mode
     {
-        get => enabled;
+        get => mode;
         set
         {
-            if (value == enabled) return;
-            if (value)
+            lock (switching) // the window and the tray menu can both change it
             {
-                starts.Start();
-                stops.Start();
-                enabled = true;
-                CheckRunning();
-            }
-            else
-            {
-                enabled = false;
-                starts.Stop(); // outside the lock: Stop waits for event handlers, which take it
-                stops.Stop();
+                if (value == mode) return;
+                if (value == ProfileMode.Off)
+                {
+                    mode = value; // OnStart ignores new games from here
+                    starts.Stop(); // outside the running lock: Stop waits for event handlers, which take it
+                    stops.Stop();
+                }
+                else if (mode == ProfileMode.Off)
+                {
+                    starts.Start(); // first, so a WMI failure changes nothing
+                    stops.Start();
+                }
                 lock (running)
                 {
-                    running.Clear();
-                    RestorePowerMode();
+                    mode = value;
+                    if (value == ProfileMode.Off) running.Clear();
+                    Sync();
                 }
+                if (value != ProfileMode.Off) CheckRunning();
             }
             Changed?.Invoke();
         }
     }
 
+    public bool ProfileOn
+    {
+        get { lock (running) return profileOn; }
+    }
+
+    // A game taken off the list (say, its gaming profile switch was turned off) stops counting straight away.
     public List<Game> Games
     {
         get { lock (running) return games; }
-        set { lock (running) games = value; }
+        set
+        {
+            lock (running)
+            {
+                games = value;
+                foreach (var pid in running.Where(r => !value.Contains(r.Value)).Select(r => r.Key).ToList()) running.Remove(pid);
+                Sync();
+            }
+        }
     }
 
     public List<string> Running
@@ -81,16 +111,16 @@ public sealed class GameWatcher : IDisposable
     // another closes can't leave the power mode stuck on Best performance.
     void OnStart(uint pid)
     {
-        if (!enabled || ExePath(pid) is not { } exe) return;
+        if (mode == ProfileMode.Off || ExePath(pid) is not { } exe) return;
         Game? game = null;
         try
         {
             lock (running)
             {
                 game = Optimiser.Games.ForExe(exe, games);
-                if (!enabled || game == null || running.ContainsKey(pid)) return; // paused while this one was starting
+                if (mode == ProfileMode.Off || game == null || running.ContainsKey(pid)) return; // turned off while it started
                 running[pid] = game;
-                if (running.Count == 1) StartProfile();
+                Sync();
             }
             Tune(pid);
             if (Settings.Get(GpuSetting, false)) PreferDedicatedGpu(backup, exe); // ready for next launch
@@ -116,7 +146,7 @@ public sealed class GameWatcher : IDisposable
             lock (running)
             {
                 if (!running.Remove(pid)) return;
-                if (running.Count == 0) RestorePowerMode();
+                Sync();
             }
         }
         catch (Exception e)
@@ -124,6 +154,17 @@ public sealed class GameWatcher : IDisposable
             Warning?.Invoke($"Couldn't put your power mode back: {e.Message}");
         }
         Changed?.Invoke();
+    }
+
+    // Switches the power mode to match the profile, under the running lock: on in On mode, or in Automatic while a
+    // game runs. The same lock as the count, so a game starting as another closes can't leave it stuck on.
+    void Sync()
+    {
+        var on = mode == ProfileMode.On || (mode == ProfileMode.Automatic && running.Count > 0);
+        if (on == profileOn) return;
+        profileOn = on;
+        if (on) StartProfile();
+        else RestorePowerMode();
     }
 
     void StartProfile()
