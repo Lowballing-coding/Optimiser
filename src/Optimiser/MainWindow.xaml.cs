@@ -300,7 +300,7 @@ public partial class MainWindow : Window
         GameCount.Visibility = NoGames.Visibility = Visibility.Collapsed;
         if (App.GamesScanned) (App.GameList.Count > 0 ? GameCount : NoGames).Visibility = Visibility.Visible;
 
-        var watching = App.GameList.Count == 1 ? "Watching 1 game." : $"Watching {App.GameList.Count} games.";
+        var watching = App.GameList.Count switch { 0 => "No games found yet.", 1 => "Watching 1 game.", var n => $"Watching {n} games." };
         var (status, hint, dot) =
             App.WatcherError is { } error ? ("Can't watch for games", $"Windows wouldn't report programs starting: {error}", Paint("Warn"))
             : running.Count > 0 ? ("Gaming profile on", $"{string.Join(", ", running)} {(running.Count == 1 ? "is" : "are")} running.", Paint("Good"))

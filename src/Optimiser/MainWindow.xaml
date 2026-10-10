@@ -179,7 +179,7 @@
       </ScrollViewer>
 
       <ScrollViewer x:Name="Optimisations" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="0,0,0,28">
+        <StackPanel Margin="0,0,14,28">
           <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left"
                      Text="Only the optimisations that fit this PC are shown. Every switch saves the original setting first, so turning it off puts things back exactly as they were." />
           <StackPanel x:Name="Groups" />
@@ -187,7 +187,7 @@
       </ScrollViewer>
 
       <ScrollViewer x:Name="Games" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="0,0,0,28">
+        <StackPanel Margin="0,0,14,28">
           <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left"
                      Text="Optimiser finds your Steam and Epic games by itself. While one is running it switches on the gaming profile from the Optimisations page, and puts your normal settings back when the game closes." />
 
