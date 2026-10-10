@@ -300,15 +300,20 @@ public partial class MainWindow : Window
         GameCount.Visibility = NoGames.Visibility = Visibility.Collapsed;
         if (App.GamesScanned) (App.GameList.Count > 0 ? GameCount : NoGames).Visibility = Visibility.Visible;
 
-        var background = AutoStart.IsOn();
-        (GameStatus.Text, GameHint.Text, GameDot.Fill) =
+        var watching = App.GameList.Count switch { 0 => "No games found yet.", 1 => "Watching 1 game.", var n => $"Watching {n} games." };
+        var (status, hint, dot) =
             App.WatcherError is { } error ? ("Can't watch for games", $"Windows wouldn't report programs starting: {error}", Paint("Warn"))
             : running.Count > 0 ? ("Gaming profile on", $"{string.Join(", ", running)} {(running.Count == 1 ? "is" : "are")} running.", Paint("Good"))
-            : !App.GamesScanned ? ("Looking for games", "Checking your Steam and Epic libraries.", Paint("Line"))
-            : background ? ("Waiting for a game", "Optimiser runs in the tray, so this works with the window closed too.", Paint("Line"))
-            : ("Waiting for a game", "This only works while Optimiser is open. Turn on \"Run in the background and start with Windows\" "
-                                   + "on the Optimisations page so it keeps working after you close the window.", Paint("Warn"));
+            : !App.GamesScanned ? ("Looking for games", "Checking your Steam and Epic libraries.", Paint("Muted"))
+            : AutoStart.IsOn() ? ("Waiting for a game", $"{watching} Optimiser runs in the tray, so this works with the window closed too.", Paint("Muted"))
+            : ("Waiting for a game", $"{watching} This only works while Optimiser is open. Turn on \"Run in the background and start "
+                                   + "with Windows\" on the Optimisations page so it keeps working after you close the window.", Paint("Warn"));
+        GameStatus.Text = DashGameStatus.Text = status;
+        GameHint.Text = DashGameHint.Text = hint;
+        GameDot.Fill = DashGameDot.Fill = dot;
     }
+
+    void OnShowGames(object sender, RoutedEventArgs e) => ((RadioButton)Nav.Children[2]).IsChecked = true;
 
     Brush Paint(string name) => (Brush)FindResource(name);
 

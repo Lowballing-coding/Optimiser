@@ -133,16 +133,34 @@
               <ColumnDefinition Width="2*" />
             </Grid.ColumnDefinitions>
 
-            <Border Style="{StaticResource Panel}" VerticalAlignment="Top">
-              <StackPanel>
-                <TextBlock Text="Recommended for you" Style="{StaticResource PanelTitle}" />
-                <ItemsControl x:Name="Recommended" ItemTemplate="{StaticResource RowLine}" />
-                <TextBlock x:Name="AllDone" Style="{StaticResource MutedText}" Visibility="Collapsed" Margin="0,0,0,8"
-                           Text="Everything Optimiser recommends for this PC is on." />
-                <Button x:Name="ApplyAllButton" Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Margin="0,4,0,0"
-                        Content="Apply all recommended" Click="OnApplyAll" />
-              </StackPanel>
-            </Border>
+            <StackPanel>
+              <Border Style="{StaticResource Panel}">
+                <StackPanel>
+                  <TextBlock Text="Recommended for you" Style="{StaticResource PanelTitle}" />
+                  <ItemsControl x:Name="Recommended" ItemTemplate="{StaticResource RowLine}" />
+                  <TextBlock x:Name="AllDone" Style="{StaticResource MutedText}" Visibility="Collapsed" Margin="0,0,0,8"
+                             Text="Everything Optimiser recommends for this PC is on." />
+                  <Button x:Name="ApplyAllButton" Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Margin="0,4,0,0"
+                          Visibility="Collapsed"
+                          Content="Apply all recommended" Click="OnApplyAll" />
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
+                <StackPanel>
+                  <TextBlock Text="Gaming profile" Style="{StaticResource PanelTitle}" />
+                  <DockPanel>
+                    <Button DockPanel.Dock="Right" Style="{StaticResource SecondaryButton}" Padding="14,6" Margin="20,0,0,0"
+                            VerticalAlignment="Center" Content="Your games" Click="OnShowGames" />
+                    <Ellipse x:Name="DashGameDot" Width="8" Height="8" Margin="0,6,12,0" VerticalAlignment="Top" />
+                    <StackPanel>
+                      <TextBlock x:Name="DashGameStatus" FontWeight="SemiBold" />
+                      <TextBlock x:Name="DashGameHint" Style="{StaticResource MutedText}" FontSize="12.5" Margin="0,3,0,0" />
+                    </StackPanel>
+                  </DockPanel>
+                </StackPanel>
+              </Border>
+            </StackPanel>
 
             <Border Grid.Column="2" Style="{StaticResource Panel}" VerticalAlignment="Top">
               <StackPanel>
@@ -162,7 +180,7 @@
       </ScrollViewer>
 
       <ScrollViewer x:Name="Optimisations" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="0,0,0,28">
+        <StackPanel Margin="0,0,14,28">
           <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left"
                      Text="Only the optimisations that fit this PC are shown. Every switch saves the original setting first, so turning it off puts things back exactly as they were." />
           <StackPanel x:Name="Groups" />
@@ -170,7 +188,7 @@
       </ScrollViewer>
 
       <ScrollViewer x:Name="Games" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="0,0,0,28">
+        <StackPanel Margin="0,0,14,28">
           <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left"
                      Text="Optimiser finds your Steam and Epic games by itself. While one is running it switches on the gaming profile from the Optimisations page, and puts your normal settings back when the game closes." />
 
@@ -190,7 +208,7 @@
           </Border>
 
           <TextBlock x:Name="GameCount" Style="{StaticResource GroupTitle}" />
-          <TextBlock x:Name="NoGames" Style="{StaticResource MutedText}" Visibility="Collapsed"
+          <TextBlock x:Name="NoGames" Style="{StaticResource MutedText}" Visibility="Collapsed" Margin="2,18,0,0"
                      Text="No games found yet. If you play something that isn't on Steam or Epic, add the folder it's installed in." />
           <ItemsControl x:Name="GameList">
             <ItemsControl.ItemTemplate>

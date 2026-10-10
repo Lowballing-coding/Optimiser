@@ -20,9 +20,14 @@ public partial class App : Application
     static EventWaitHandle quit = null!;
     static Forms.NotifyIcon? tray;
 
-    // Show what went wrong instead of vanishing. The app still closes afterwards, so nothing runs on in a bad state.
+    // Show what went wrong instead of vanishing, then close properly so the power mode goes back and the tray
+    // icon goes away. Closing means nothing runs on in a bad state.
     public App() => DispatcherUnhandledException += (_, e) =>
+    {
         MessageBox.Show(e.Exception.Message, "Optimiser hit a problem", MessageBoxButton.OK, MessageBoxImage.Error);
+        e.Handled = true;
+        Quit();
+    };
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -83,16 +88,20 @@ public partial class App : Application
 
     public static async Task ScanGames()
     {
-        GameList = await Task.Run(() =>
+        try
         {
-            var games = Games.Find();
-            if (Watcher != null)
+            GameList = await Task.Run(() =>
             {
-                Watcher.Games = games;
-                Watcher.CheckRunning();
-            }
-            return games;
-        });
+                var games = Games.Find();
+                if (Watcher != null)
+                {
+                    Watcher.Games = games;
+                    Watcher.CheckRunning();
+                }
+                return games;
+            });
+        }
+        catch (Exception e) { Notify($"Couldn't look for games: {e.Message}", Forms.ToolTipIcon.Warning); }
         GamesScanned = true;
         OnGamesChanged();
     }
