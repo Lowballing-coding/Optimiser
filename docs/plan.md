@@ -71,15 +71,21 @@ On launch it reads CPU, GPU(s), RAM, battery present (laptop or desktop), manufa
 
 - **C# / .NET 10 / WPF**, published as one self-contained `.exe` (no installer, nothing else to install).
 - Runs as administrator, since every tweak touches system settings.
-- Code lives in a private GitHub repo. GitHub builds the `.exe` on a Windows machine and attaches it to a release you download.
+- Code lives in a GitHub repo. GitHub builds the `.exe` on a Windows machine and attaches it to a release you download.
 - Not code-signed (it's just for you), so Windows SmartScreen will warn once on first run.
 
 ## Build order
 
-1. **Shell and safety:** dark window, sidebar, hardware detection, restore point, backup/undo engine. Nothing tweaks yet.
-2. **Tweaks:** the 12 above with toggles, score ring and "Apply all".
-3. **Stats panel.**
-4. **Background mode:** tray icon, start with Windows, game detection, automatic profile switching.
-5. **Polish:** test on your laptop, fix whatever you find.
+1. **Shell and safety:** dark window, sidebar, hardware detection, restore point, backup/undo engine. Nothing tweaks yet. Done.
+2. **Tweaks:** toggles, score ring and "Apply all". Done.
+3. **Stats panel.** Done.
+4. **Background mode:** tray icon, start with Windows, game detection, automatic profile switching. Done.
+5. **Polish:** dashboard gaming status, dark scroll bars, final code and security review, write-up. Done; testing on the laptop is next.
 
-Each step ends with a download you can try before the next one starts.
+## What changed from the plan while building
+
+- **CPU temperature is left out.** Every way of reading it needs a kernel driver (LibreHardwareMonitor's included), which isn't worth the risk in an always-admin app. GPU temperature comes from Nvidia's own driver.
+- **Visual effects tweak dropped.** On a 3070 Ti the gain is too small to notice, and it makes Windows look worse.
+- **Power mode instead of power plan.** Windows 11's power mode slider (Settings > Power) is the supported way to get full performance on top of the Balanced plan, so the gaming profile sets it to Best performance and back.
+- **Start with Windows installs a copy in Program Files.** The startup task runs the app as admin, so it starts a copy only admins can change rather than the file in Downloads.
+- **The dashboard has no shortcut tiles.** It shows the recommendations, the gaming profile status and your PC's hardware instead; the sidebar covers the rest.
