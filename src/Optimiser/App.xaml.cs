@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
 namespace Optimiser;
@@ -15,6 +16,15 @@ public partial class App : Application
     public static bool GamesScanned { get; private set; }
     public static event Action? GamesChanged; // the list was rescanned or a game started or stopped; UI thread
     public static bool Exiting { get; private set; } // closing the window should really exit, not hide to the tray
+
+    public const string NotifySetting = "NotifyGamingProfile", BatteryWarningSetting = "WarnOnBattery";
+    public static Release? Update { get; private set; }    // a newer build, if the last check found one
+    public static DateTime? UpdateChecked { get; private set; }
+    public static string? UpdateError { get; private set; }
+    public static event Action? UpdateChanged;              // UI thread
+
+    static List<string> wasRunning = [];
+    static Version? toldAbout;
 
     static Mutex single = null!;
     static EventWaitHandle quit = null!;
@@ -49,6 +59,7 @@ public partial class App : Application
         }
         quit.Reset();
         ThreadPool.RegisterWaitForSingleObject(quit, (_, _) => Dispatcher.InvokeAsync(Quit), null, Timeout.Infinite, true);
+        Updates.CleanUp();
 
         try { GameWatcher.RestorePowerMode(); } catch { } // left on Best performance if Optimiser was closed mid-game
         try
@@ -71,10 +82,19 @@ public partial class App : Application
         tray.ContextMenuStrip.Items.Add("Open Optimiser", null, (_, _) => ShowWindow());
         tray.ContextMenuStrip.Items.Add("Exit", null, (_, _) => Quit());
         tray.MouseClick += (_, me) => { if (me.Button == Forms.MouseButtons.Left) ShowWindow(); };
+        tray.BalloonTipClicked += (_, _) => ShowWindow();
 
         MainWindow = new MainWindow();
         MainWindow.Closed += (_, _) => Quit();
         if (!e.Args.Contains("--tray")) MainWindow.Show();
+
+        if (!e.Args.Contains("--snapshot"))
+        {
+            var twiceADay = new DispatcherTimer { Interval = TimeSpan.FromHours(12) };
+            twiceADay.Tick += (_, _) => AutoCheck();
+            twiceADay.Start();
+            AutoCheck();
+        }
 
         // Keeps the installed copy up to date when a newer download is opened.
         if (AutoStart.IsOn()) Task.Run(() => { try { AutoStart.TurnOn(Environment.ProcessPath!); } catch { } });
@@ -109,9 +129,42 @@ public partial class App : Application
     static void OnGamesChanged()
     {
         var running = Watcher?.Running ?? [];
+        // One notification per change, so the battery warning isn't replaced by the "on" one a moment later.
+        if (running.Count > 0 && wasRunning.Count == 0)
+        {
+            var on = $"Gaming profile on for {string.Join(", ", running)}.";
+            if (Settings.Get(BatteryWarningSetting, true) && Stats.OnBattery())
+                Notify($"{on} You're on battery, so the RTX GPU is held back. Plug in for full performance.", Forms.ToolTipIcon.Warning);
+            else if (Settings.Get(NotifySetting, true)) Notify(on);
+        }
+        else if (running.Count == 0 && wasRunning.Count > 0 && Watcher?.Enabled != false && Settings.Get(NotifySetting, true))
+            Notify($"Gaming profile off now that {string.Join(", ", wasRunning)} closed.");
+        wasRunning = running;
+
         var text = running.Count == 0 ? "Optimiser" : $"Optimiser: gaming profile on for {string.Join(", ", running)}";
         if (tray != null) tray.Text = text.Length > 127 ? text[..124] + "..." : text; // Windows' limit
         GamesChanged?.Invoke();
+    }
+
+    public static async Task CheckForUpdates()
+    {
+        try
+        {
+            Update = await Updates.Check();
+            UpdateChecked = DateTime.Now;
+            UpdateError = null;
+        }
+        catch (Exception e) { UpdateError = e.Message; }
+        UpdateChanged?.Invoke();
+    }
+
+    static async void AutoCheck()
+    {
+        if (!Settings.Get(Updates.AutoCheckSetting, true)) return;
+        await CheckForUpdates();
+        if (Update is not { } update || update.Version == toldAbout) return;
+        toldAbout = update.Version;
+        Notify($"Optimiser {update.Version} is ready to install. Open Settings to update.");
     }
 
     public static void Notify(string message, Forms.ToolTipIcon icon = Forms.ToolTipIcon.Info) =>

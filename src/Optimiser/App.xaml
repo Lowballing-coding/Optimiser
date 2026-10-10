@@ -207,6 +207,7 @@
     <!-- Sidebar page buttons: an icon glyph as content, the page name (Tag) beside it, accent bar when selected -->
     <Style x:Key="Nav" TargetType="RadioButton">
       <Setter Property="AutomationProperties.Name" Value="{Binding Tag, RelativeSource={RelativeSource Self}}" />
+      <Setter Property="GroupName" Value="Pages" /><!-- Settings sits in a different panel from the rest -->
       <Setter Property="Height" Value="56" />
       <Setter Property="Foreground" Value="{StaticResource Muted}" />
       <Setter Property="FontFamily" Value="{StaticResource Icons}" />

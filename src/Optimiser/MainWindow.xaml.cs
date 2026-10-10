@@ -1,8 +1,12 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
@@ -31,6 +35,7 @@ public record GameRow(Game Game, bool Running);
 public partial class MainWindow : Window
 {
     public const double SidebarOpen = 200; // sidebar width while hovered; 72 when closed
+    const string PlacementSetting = "WindowPlacement";
     bool busy, toldAboutTray;
     Stats? stats;
     readonly DispatcherTimer statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -42,18 +47,13 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         ((RadioButton)Nav.Children[0]).IsChecked = true;
-        StateChanged += (_, _) =>
-        {
-            var maximised = WindowState == WindowState.Maximized;
-            // A borderless window hangs off the screen edge when maximised; pad it back in.
-            Root.Margin = maximised ? SystemParameters.WindowResizeBorderThickness : new Thickness(0);
-            MaxButton.Content = maximised ? "" : "";
-            MaxButton.ToolTip = maximised ? "Restore" : "Maximise";
-        };
+        StateChanged += (_, _) => ShowState();
+        RestorePlacement();
         Loaded += OnLoaded;
         Closed += (_, _) => stats?.Dispose();
         Closing += (_, e) =>
         {
+            SavePlacement();
             // With background mode on, closing keeps Optimiser running in the tray to watch for games.
             if (App.Exiting || !AutoStart.IsOn()) return;
             e.Cancel = true;
@@ -62,6 +62,8 @@ public partial class MainWindow : Window
             toldAboutTray = true;
         };
         App.GamesChanged += ShowGames;
+        App.UpdateChanged += () => ShowUpdate(App.Update);
+        ShowUpdate(null);
         statsTimer.Tick += (_, _) => ShowStats();
         statsTimer.Start();
         ShowChanges();
@@ -128,6 +130,9 @@ public partial class MainWindow : Window
     void Refresh()
     {
         ShowChanges();
+        var settings = Tweaks.AppSettings().Select(ToRow).ToList();
+        UpdateSettings.ItemsSource = settings.Where(r => r.Item.Group == Tweaks.UpdatesGroup).ToList();
+        AddGroups(SettingGroups, settings.Where(r => r.Item.Group != Tweaks.UpdatesGroup));
         if (App.Hardware == null) return;
         var rows = Tweaks.All(App.Backup).Where(o => o.AppliesTo(App.Hardware)).Select(ToRow).ToList();
 
@@ -153,13 +158,18 @@ public partial class MainWindow : Window
         AllDone.Visibility = left.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         ApplyAllButton.Visibility = left.Any(r => r.IsSwitch) ? Visibility.Visible : Visibility.Collapsed;
 
-        Groups.Children.Clear();
+        AddGroups(Groups, rows);
+        ShowGames(); // the background and gaming profile switches change what the Games page says
+    }
+
+    void AddGroups(Panel panel, IEnumerable<Row> rows)
+    {
+        panel.Children.Clear();
         foreach (var group in rows.GroupBy(r => r.Item.Group))
         {
-            Groups.Children.Add(new TextBlock { Text = group.Key, Style = (Style)FindResource("GroupTitle") });
-            Groups.Children.Add(new ItemsControl { ItemsSource = group.ToList(), ItemTemplate = (DataTemplate)FindResource("RowCard") });
+            panel.Children.Add(new TextBlock { Text = group.Key, Style = (Style)FindResource("GroupTitle") });
+            panel.Children.Add(new ItemsControl { ItemsSource = group.ToList(), ItemTemplate = (DataTemplate)FindResource("RowCard") });
         }
-        ShowGames(); // the background switch changes what the Games page says
     }
 
     static Row ToRow(Optimisation o)
@@ -228,7 +238,8 @@ public partial class MainWindow : Window
         var box = (CheckBox)sender;
         var o = ((Row)box.DataContext).Item;
         if (box.IsChecked == true) await Change($"Turning on {o.Name}…", () => Flip(o, true), $"Turned on {o.Name}.");
-        else await Change($"Turning off {o.Name}…", () => Flip(o, false), $"Turned off {o.Name} and put back the original setting.");
+        else await Change($"Turning off {o.Name}…", () => Flip(o, false),
+            $"Turned off {o.Name}{(o.UsesBackup ? " and put back the original setting" : "")}.");
     }
 
     async void OnRowButton(object sender, RoutedEventArgs e)
@@ -253,13 +264,30 @@ public partial class MainWindow : Window
         if (failed.Count > 0) StatusText.Text += $" Some couldn't be applied: {string.Join(", ", failed)}.";
     }
 
+    RadioButton[] NavButtons => [.. Nav.Children.OfType<RadioButton>(), SettingsNav];
+
     void OnNav(object sender, RoutedEventArgs e)
     {
         var page = (string)((RadioButton)sender).Tag;
         PageTitle.Text = page;
         foreach (FrameworkElement p in Pages.Children)
+        {
             p.Visibility = p.Name == page ? Visibility.Visible : Visibility.Collapsed;
+            if (p.Name == page && SystemParameters.ClientAreaAnimation)
+                p.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160)));
+        }
         ShowStats();
+    }
+
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        var pages = NavButtons;
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key - Key.D1 is var n && n >= 0 && n < pages.Length)
+        {
+            pages[n].IsChecked = true;
+            e.Handled = true;
+        }
+        base.OnPreviewKeyDown(e);
     }
 
     // Called every second, but only reads anything while the Stats page is on screen: polling the GPU stops a
@@ -304,6 +332,7 @@ public partial class MainWindow : Window
         var watching = App.GameList.Count switch { 0 => "No games found yet.", 1 => "Watching 1 game.", var n => $"Watching {n} games." };
         var (status, hint, dot) =
             App.WatcherError is { } error ? ("Can't watch for games", $"Windows wouldn't report programs starting: {error}", Paint("Warn"))
+            : App.Watcher is { Enabled: false } ? ("Gaming profile paused", "It won't switch on for games until you turn it back on in Settings.", Paint("Muted"))
             : running.Count > 0 ? ("Gaming profile on", $"{string.Join(", ", running)} {(running.Count == 1 ? "is" : "are")} running.", Paint("Good"))
             : !App.GamesScanned ? ("Looking for games", "Checking your Steam and Epic libraries.", Paint("Muted"))
             : AutoStart.IsOn() ? ("Waiting for a game", $"{watching} Optimiser runs in the tray, so this works with the window closed too.", Paint("Muted"))
@@ -400,11 +429,94 @@ public partial class MainWindow : Window
         if (error != null) StatusText.Text = $"Couldn't create a restore point. {error}";
     }
 
+    void ShowUpdate(Release? update)
+    {
+        VersionText.Text = $"Optimiser {Updates.Current}";
+        UpdateText.Text = update != null ? $"Optimiser {update.Version} is ready to install. It takes a few seconds and Optimiser reopens by itself."
+                        : App.UpdateError is { } error ? $"Couldn't check for updates: {error}"
+                        : App.UpdateChecked is { } at ? $"You have the latest version. Checked at {at:HH:mm}."
+                        : "Not checked yet.";
+        InstallButton.Content = $"Install {update?.Version}";
+        InstallButton.Visibility = UpdateDot.Visibility = update != null ? Visibility.Visible : Visibility.Collapsed;
+        UpdateNotes.Text = update?.Notes;
+        WhatsNew.Visibility = string.IsNullOrEmpty(update?.Notes) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    async void OnCheckForUpdates(object sender, RoutedEventArgs e)
+    {
+        CheckButton.IsEnabled = false;
+        UpdateText.Text = "Checking…";
+        await App.CheckForUpdates();
+        CheckButton.IsEnabled = true;
+    }
+
+    async void OnInstallUpdate(object sender, RoutedEventArgs e)
+    {
+        if (App.Update is not { } update || busy) return;
+        busy = true; // no tweak changes mid-install
+        CheckButton.IsEnabled = InstallButton.IsEnabled = false;
+        var progress = new Progress<int>(p => StatusText.Text = $"Downloading Optimiser {update.Version}… {p}%");
+        try
+        {
+            await Task.Run(() => Updates.Install(update, progress));
+            StatusText.Text = $"Installed Optimiser {update.Version}. It opens in a moment and closes this one.";
+            CheckButton.IsEnabled = true;
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Couldn't install the update: {ex.Message}";
+            CheckButton.IsEnabled = InstallButton.IsEnabled = true;
+        }
+        busy = false;
+    }
+
+    // explorer.exe opens the browser as you rather than as admin.
+    void OnOpenGitHub(object sender, RoutedEventArgs e) =>
+        Process.Start("explorer.exe", "https://github.com/Lowballing-coding/Optimiser/commits/main")?.Dispose();
+
+    void ShowState()
+    {
+        var maximised = WindowState == WindowState.Maximized;
+        // A borderless window hangs off the screen edge when maximised; pad it back in.
+        Root.Margin = maximised ? SystemParameters.WindowResizeBorderThickness : new Thickness(0);
+        MaxButton.Content = maximised ? "" : "";
+        MaxButton.ToolTip = maximised ? "Restore" : "Maximise";
+    }
+
+    // Opens where it was last closed, unless that's off every screen now.
+    void RestorePlacement()
+    {
+        if (Optimiser.Settings.GetText(PlacementSetting)?.Split(',') is not { Length: 5 } parts) return;
+        var n = parts[..4].Select(p => double.TryParse(p, CultureInfo.InvariantCulture, out var v) ? v : double.NaN).ToArray();
+        if (n.Any(v => !double.IsFinite(v)) || n[2] <= 0 || n[3] <= 0) return;
+        var bounds = new Rect(n[0], n[1], n[2], n[3]);
+        var screens = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+                               SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+        if (!screens.Contains(bounds.TopLeft + new Vector(60, 20))) return;
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        (Left, Top, Width, Height) = (bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+        if (parts[4] == "max") WindowState = WindowState.Maximized;
+        ShowState();
+    }
+
+    void SavePlacement()
+    {
+        var b = RestoreBounds;
+        if (b.IsEmpty) return;
+        try
+        {
+            Optimiser.Settings.SetText(PlacementSetting, string.Create(CultureInfo.InvariantCulture,
+                $"{b.Left:0},{b.Top:0},{b.Width:0},{b.Height:0},{(WindowState == WindowState.Maximized ? "max" : "normal")}"));
+        }
+        catch { } // only a nicety
+    }
+
     async Task Snapshot(string folder)
     {
         Directory.CreateDirectory(folder);
         async Task Save(string name)
         {
+            await Task.Delay(250); // let the page fade in
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             var bitmap = new RenderTargetBitmap((int)ActualWidth, (int)ActualHeight, 96, 96, PixelFormats.Pbgra32);
             bitmap.Render(this);
@@ -413,11 +525,13 @@ public partial class MainWindow : Window
             using var file = File.Create(System.IO.Path.Combine(folder, $"{name}.png"));
             png.Save(file);
         }
-        foreach (RadioButton nav in Nav.Children)
+        foreach (var nav in NavButtons)
         {
             nav.IsChecked = true;
             await Save((string)nav.Tag);
         }
+        ShowUpdate(new Release(new Version(1, 0, 99), "", 0, null, "Settings page with update checks\nRemembers where you left the window"));
+        await Save("Settings with an update");
         Sidebar.Width = SidebarOpen; // as it looks while hovered
         await Save("Sidebar");
         App.Quit();

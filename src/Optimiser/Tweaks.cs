@@ -55,16 +55,7 @@ public static class Tweaks
             ButtonText = "Open MSI Center",
             Button = OpenMsiCenter,
         },
-        new()
-        {
-            Name = "Run in the background and start with Windows",
-            Group = WhileGaming,
-            Description = "The gaming profile only works while Optimiser is running. This starts it in the system tray when you "
-                        + "sign in, without a UAC prompt, and closing the window leaves it running there.",
-            IsOn = AutoStart.IsOn,
-            TurnOn = () => AutoStart.TurnOn(Environment.ProcessPath!),
-            TurnOff = AutoStart.TurnOff,
-        },
+        Background(WhileGaming),
         SettingSwitch("Best performance power mode", WhileGaming,
             "Switches Windows' power mode to Best performance while a game runs, then puts your usual mode back when it "
             + "closes. Higher clocks while you play, normal battery life the rest of the time.",
@@ -118,6 +109,52 @@ public static class Tweaks
             [(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\DiagTrack", "Start", 4)],
             after: on => Run("sc.exe", on ? "stop DiagTrack" : "start DiagTrack")),
     ];
+
+    // Shown on both the Optimisations and Settings pages.
+    static Optimisation Background(string group) => new()
+    {
+        Name = "Run in the background and start with Windows",
+        Group = group,
+        Description = "The gaming profile only works while Optimiser is running. This starts it in the system tray when you "
+                    + "sign in, without a UAC prompt, and closing the window leaves it running there.",
+        IsOn = AutoStart.IsOn,
+        TurnOn = () => AutoStart.TurnOn(Environment.ProcessPath!),
+        TurnOff = AutoStart.TurnOff,
+    };
+
+    public const string GamingProfile = "Gaming profile", UpdatesGroup = "Updates";
+
+    // The Settings page: how Optimiser itself behaves. Not part of the score.
+    public static List<Optimisation> AppSettings() =>
+    [
+        new()
+        {
+            Name = "Switch to the gaming profile automatically",
+            Group = GamingProfile,
+            Description = "Turn this off to pause the gaming profile without closing Optimiser. Your games and the switches on "
+                        + "the Optimisations page stay as they are for when you turn it back on.",
+            IsOn = () => App.Watcher?.Enabled ?? Settings.Get(GameWatcher.EnabledSetting, true),
+            TurnOn = () => SetGamingProfile(true),
+            TurnOff = () => SetGamingProfile(false),
+        },
+        Background(GamingProfile),
+        SettingSwitch("Tell me when the gaming profile switches on and off", GamingProfile,
+            "Shows a notification when a game starts and the gaming profile turns on, and again when it turns off.",
+            App.NotifySetting),
+        SettingSwitch("Warn me when a game starts on battery", GamingProfile,
+            "On battery the RTX GPU is held back to a fraction of its power, so this reminds you to plug in.",
+            App.BatteryWarningSetting),
+        SettingSwitch("Check for updates automatically", UpdatesGroup,
+            "Looks for a newer Optimiser on GitHub when it starts and twice a day, and lets you know. Nothing installs "
+            + "until you choose to.",
+            Updates.AutoCheckSetting),
+    ];
+
+    static void SetGamingProfile(bool on)
+    {
+        if (App.Watcher != null) App.Watcher.Enabled = on; // first, so a WMI failure doesn't save a setting that isn't working
+        Settings.Set(GameWatcher.EnabledSetting, on);
+    }
 
     // A switch made of registry values. On = every value already matches; off = undo from the backup.
     public static Optimisation RegistryTweak(Backup backup, string name, string group, string description,
