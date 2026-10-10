@@ -30,6 +30,7 @@ public record GameRow(Game Game, bool Running);
 
 public partial class MainWindow : Window
 {
+    public const double SidebarOpen = 200; // sidebar width while hovered; 72 when closed
     bool busy, toldAboutTray;
     Stats? stats;
     readonly DispatcherTimer statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -402,17 +403,23 @@ public partial class MainWindow : Window
     async Task Snapshot(string folder)
     {
         Directory.CreateDirectory(folder);
-        foreach (RadioButton nav in Nav.Children)
+        async Task Save(string name)
         {
-            nav.IsChecked = true;
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             var bitmap = new RenderTargetBitmap((int)ActualWidth, (int)ActualHeight, 96, 96, PixelFormats.Pbgra32);
             bitmap.Render(this);
             var png = new PngBitmapEncoder();
             png.Frames.Add(BitmapFrame.Create(bitmap));
-            using var file = File.Create(System.IO.Path.Combine(folder, $"{nav.Tag}.png"));
+            using var file = File.Create(System.IO.Path.Combine(folder, $"{name}.png"));
             png.Save(file);
         }
+        foreach (RadioButton nav in Nav.Children)
+        {
+            nav.IsChecked = true;
+            await Save((string)nav.Tag);
+        }
+        Sidebar.Width = SidebarOpen; // as it looks while hovered
+        await Save("Sidebar");
         App.Quit();
     }
 

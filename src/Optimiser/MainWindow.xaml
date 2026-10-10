@@ -1,6 +1,7 @@
 <Window x:Class="Optimiser.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Optimiser"
         Title="Optimiser" Width="1180" Height="760" MinWidth="960" MinHeight="620"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         Background="{StaticResource Bg}" Foreground="{StaticResource Text}"
@@ -12,6 +13,42 @@
   </WindowChrome.WindowChrome>
 
   <Window.Resources>
+    <Style x:Key="Sidebar" TargetType="Border">
+      <Setter Property="Width" Value="72" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Panel.ZIndex" Value="1" />
+      <Setter Property="Background" Value="{StaticResource Rail}" />
+      <Setter Property="Effect">
+        <Setter.Value>
+          <DropShadowEffect BlurRadius="28" ShadowDepth="0" Color="Black" Opacity="0" />
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Trigger.EnterActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetProperty="Width" To="{x:Static local:MainWindow.SidebarOpen}" Duration="0:0:0.2">
+                  <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetProperty="Effect.Opacity" To="0.5" Duration="0:0:0.2" />
+              </Storyboard>
+            </BeginStoryboard>
+          </Trigger.EnterActions>
+          <Trigger.ExitActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetProperty="Width" To="72" Duration="0:0:0.18">
+                  <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetProperty="Effect.Opacity" To="0" Duration="0:0:0.18" />
+              </Storyboard>
+            </BeginStoryboard>
+          </Trigger.ExitActions>
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
     <!-- Status word for checks Optimiser can only detect -->
     <Style x:Key="CheckStatus" TargetType="TextBlock">
       <Setter Property="VerticalAlignment" Value="Center" />
@@ -80,17 +117,26 @@
       <RowDefinition />
     </Grid.RowDefinitions>
 
-    <!-- Sidebar -->
-    <DockPanel Grid.RowSpan="2" Background="{StaticResource Rail}">
-      <Image DockPanel.Dock="Top" Source="Assets/optimiser.ico" Width="30" Height="30" Margin="0,10,0,18" />
-      <StackPanel x:Name="Nav" WindowChrome.IsHitTestVisibleInChrome="True">
-        <RadioButton Style="{StaticResource Nav}" Content="&#xE80F;" Tag="Dashboard" ToolTip="Dashboard" Checked="OnNav" />
-        <RadioButton Style="{StaticResource Nav}" Content="&#xE945;" Tag="Optimisations" ToolTip="Optimisations" Checked="OnNav" />
-        <RadioButton Style="{StaticResource Nav}" Content="&#xE7FC;" Tag="Games" ToolTip="Games" Checked="OnNav" />
-        <RadioButton Style="{StaticResource Nav}" Content="&#xE9D9;" Tag="Stats" ToolTip="Stats" Checked="OnNav" />
-        <RadioButton Style="{StaticResource Nav}" Content="&#xE81C;" Tag="Backups" ToolTip="Backups" Checked="OnNav" />
-      </StackPanel>
-    </DockPanel>
+    <!-- Sidebar: icons only, and slides open over the page on hover to show each page's name. The outer border
+         casts the shadow and the inner one clips, so the shadow isn't clipped away. -->
+    <Border x:Name="Sidebar" Grid.RowSpan="2" Grid.ColumnSpan="2" Style="{StaticResource Sidebar}"
+            WindowChrome.IsHitTestVisibleInChrome="True">
+      <Border ClipToBounds="True">
+        <DockPanel Width="{x:Static local:MainWindow.SidebarOpen}" HorizontalAlignment="Left">
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Height="30" Margin="21,10,0,18">
+            <Image Source="Assets/optimiser.ico" Width="30" Height="30" />
+            <TextBlock Text="Optimiser" Margin="21,0,0,0" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+          </StackPanel>
+          <StackPanel x:Name="Nav">
+            <RadioButton Style="{StaticResource Nav}" Content="&#xE80F;" Tag="Dashboard" Checked="OnNav" />
+            <RadioButton Style="{StaticResource Nav}" Content="&#xE945;" Tag="Optimisations" Checked="OnNav" />
+            <RadioButton Style="{StaticResource Nav}" Content="&#xE7FC;" Tag="Games" Checked="OnNav" />
+            <RadioButton Style="{StaticResource Nav}" Content="&#xE9D9;" Tag="Stats" Checked="OnNav" />
+            <RadioButton Style="{StaticResource Nav}" Content="&#xE81C;" Tag="Backups" Checked="OnNav" />
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </Border>
 
     <!-- Title bar: page name and status on the left, window buttons on the right; the rest drags the window -->
     <DockPanel Grid.Column="1">

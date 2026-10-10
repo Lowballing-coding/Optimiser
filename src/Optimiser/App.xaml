@@ -204,8 +204,9 @@
       </Style.Triggers>
     </Style>
 
-    <!-- Sidebar page buttons: an icon glyph as content, accent bar when selected -->
+    <!-- Sidebar page buttons: an icon glyph as content, the page name (Tag) beside it, accent bar when selected -->
     <Style x:Key="Nav" TargetType="RadioButton">
+      <Setter Property="AutomationProperties.Name" Value="{Binding Tag, RelativeSource={RelativeSource Self}}" />
       <Setter Property="Height" Value="56" />
       <Setter Property="Foreground" Value="{StaticResource Muted}" />
       <Setter Property="FontFamily" Value="{StaticResource Icons}" />
@@ -216,9 +217,16 @@
         <Setter.Value>
           <ControlTemplate TargetType="RadioButton">
             <Grid x:Name="Cell" Background="Transparent">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="72" />
+                <ColumnDefinition />
+              </Grid.ColumnDefinitions>
               <Border x:Name="Bar" Width="3" Margin="0,14" HorizontalAlignment="Left" CornerRadius="0,2,2,0"
                       Background="{StaticResource Accent}" Visibility="Collapsed" />
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <!-- The page name, shown when the sidebar opens -->
+              <TextBlock Grid.Column="1" Text="{TemplateBinding Tag}" FontFamily="{StaticResource Ui}" FontSize="14"
+                         VerticalAlignment="Center" />
             </Grid>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
