@@ -45,7 +45,7 @@ public static class Rgb
             "Optimiser can't set a Wooting keyboard directly, but turn on Chroma Connect in Wootility's settings and it "
             + "follows the Razer Chroma colour."),
         ("Redragon|OemDrv", "Redragon", null,
-            "Redragon doesn't let other programs set its colours. Open it with the keyboard on its cable, pick a steady "
+            "This keyboard's app doesn't let other programs set its colours. Open it with the keyboard on its cable, pick a steady "
             + "effect, untick RGB, set the colour and press Apply: the keyboard keeps it after the app closes."),
         ("^Alienware Command Center", "Alienware Command Center", null, NoWayIn),
         ("^(Corsair )?iCUE", "Corsair iCUE", null, NoWayIn),
@@ -134,8 +134,8 @@ public static class Rgb
     public static List<RgbApp> Match(IEnumerable<(string Name, string AppId)> startApps, IEnumerable<Lighting> reachable)
     {
         // By the shortcut's program too, so an updater (Redragon's rewrites the keyboard's firmware) is never picked.
-        var usable = startApps.Where(a => !Regex.IsMatch(a.Name + " " + Path.GetFileName(a.AppId), @"uninstall|unins\d|update|readme|help|manual",
-                                                         RegexOptions.IgnoreCase)
+        var usable = startApps.Where(a => !Regex.IsMatch(a.Name + " " + Path.GetFileName(a.AppId),
+                                                         "unins|update|upgrade|firmware|readme|help|manual", RegexOptions.IgnoreCase)
                                           && !a.AppId.Contains('"')).ToList();
         var apps = new List<RgbApp>();
         foreach (var known in Known)
