@@ -54,6 +54,13 @@ public partial class App : Application
         quit = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\OptimiserQuit");
         if (!Own(0))
         {
+            // A tray start only ever comes from the sign-in task. One is running already (a quick second click on the
+            // taskbar icon can run the task twice), so leave it be rather than close the window it just showed.
+            if (e.Args.Contains("--tray"))
+            {
+                Quit();
+                return;
+            }
             quit.Set();
             if (!Own(15000))
             {
