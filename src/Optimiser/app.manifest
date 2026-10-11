@@ -4,8 +4,9 @@
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
-        <!-- Every tweak changes system settings, so the app always runs elevated. -->
-        <requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
+        <!-- Every tweak changes system settings, so the app runs elevated, but it starts without asking: Program.Main
+             gets admin rights through the sign-in task when it can, so opening it doesn't show a UAC prompt. -->
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
       </requestedPrivileges>
     </security>
   </trustInfo>

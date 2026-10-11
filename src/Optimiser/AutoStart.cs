@@ -78,6 +78,20 @@ public static class AutoStart
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // it's the copy that's running
     }
 
+    // The installed copy is there and no older than exe, so it can stand in for it.
+    public static bool InstalledIsAtLeast(string exe) => File.Exists(InstalledExe) && VersionOf(InstalledExe) >= VersionOf(exe);
+
+    // Runs the sign-in task now. It's your own task, so this needs no admin rights, and it starts Optimiser as admin.
+    public static bool Run()
+    {
+        try
+        {
+            Folder().GetTask(TaskName).Run(null);
+            return true;
+        }
+        catch (Exception e) when (e is FileNotFoundException or COMException) { return false; } // background mode is off
+    }
+
     static Version VersionOf(string exe)
     {
         var info = FileVersionInfo.GetVersionInfo(exe);

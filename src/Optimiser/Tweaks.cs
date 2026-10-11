@@ -216,7 +216,8 @@ public static class Tweaks
         Name = BackgroundName,
         Group = group,
         Description = "The gaming profile only works while Optimiser is running. This starts it in the system tray when you "
-                    + "sign in, without a UAC prompt, and closing the window leaves it running there.",
+                    + "sign in, and closing the window leaves it running there. Neither that nor opening it from the taskbar "
+                    + "shows a UAC prompt.",
         IsOn = AutoStart.IsOn,
         TurnOn = () => AutoStart.TurnOn(Environment.ProcessPath!),
         TurnOff = AutoStart.TurnOff,

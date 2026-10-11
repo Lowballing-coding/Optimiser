@@ -1,3 +1,5 @@
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Windows;
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
@@ -30,6 +32,7 @@ public partial class App : Application
 
     static Mutex single = null!;
     static EventWaitHandle quit = null!;
+    static EventWaitHandle? show;
     static Forms.NotifyIcon? tray;
 
     // Show what went wrong instead of vanishing, then close properly so the power mode goes back and the tray
@@ -51,6 +54,13 @@ public partial class App : Application
         quit = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\OptimiserQuit");
         if (!Own(0))
         {
+            // A tray start only ever comes from the sign-in task. One is running already (a quick second click on the
+            // taskbar icon can run the task twice), so leave it be rather than close the window it just showed.
+            if (e.Args.Contains("--tray"))
+            {
+                Quit();
+                return;
+            }
             quit.Set();
             if (!Own(15000))
             {
@@ -61,6 +71,18 @@ public partial class App : Application
         }
         quit.Reset();
         ThreadPool.RegisterWaitForSingleObject(quit, (_, _) => Dispatcher.InvokeAsync(Quit), null, Timeout.Infinite, true);
+
+        // A copy opened without admin rights (see Program.StartAsAdmin) asks this one to show its window. You can
+        // set this event without admin rights, and showing the window is all it does.
+        try
+        {
+            var security = new EventWaitHandleSecurity();
+            security.AddAccessRule(new(new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null), EventWaitHandleRights.FullControl, AccessControlType.Allow));
+            security.AddAccessRule(new(WindowsIdentity.GetCurrent().User!, EventWaitHandleRights.Modify | EventWaitHandleRights.Synchronize, AccessControlType.Allow));
+            show = EventWaitHandleAcl.Create(false, EventResetMode.AutoReset, Program.ShowEvent, out _, security);
+            ThreadPool.RegisterWaitForSingleObject(show, (_, _) => Dispatcher.InvokeAsync(ShowWindow), null, Timeout.Infinite, false);
+        }
+        catch { } // opening it from the taskbar then asks for admin rights, as before
         Updates.CleanUp();
 
         try { GameWatcher.RestorePowerMode(); } catch { } // left on Best performance if Optimiser was closed mid-game
