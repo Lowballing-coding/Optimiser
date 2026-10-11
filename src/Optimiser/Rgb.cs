@@ -35,15 +35,18 @@ public static class Rgb
             "Lights MSI laptop keyboards and light bars and SteelSeries gear through GameSense. If nothing changes, check "
             + "Optimiser is switched on under Engine, Apps in GG."),
         ("^Razer Synapse", "Razer Synapse", RazerChroma,
-            "Lights Razer gear, and anything linked to it with Chroma Connect, through Razer Chroma. If nothing changes, "
-            + "turn on Chroma Apps in Synapse."),
+            "Lights Razer gear, and anything linked to it with Chroma Connect, through Razer Chroma. If nothing changes: "
+            + "in Synapse 3, add the Chroma Connect module under Synapse, Modules, then under Connect, Apps turn on Chroma "
+            + "Apps and Optimiser. In Synapse 4, turn both on under Chroma Apps in the Razer Chroma app."),
         ("^(Logitech )?G ?HUB", "Logitech G HUB", LogitechGHub,
             "Lights Logitech G gear. If nothing changes, turn on \"Allow games & applications to control my lighting\" in "
             + "G HUB's settings."),
         ("^Wootility", "Wootility", null,
             "Optimiser can't set a Wooting keyboard directly, but turn on Chroma Connect in Wootility's settings and it "
             + "follows the Razer Chroma colour."),
-        ("Redragon", "Redragon", null, NoWayIn),
+        ("Redragon|OemDrv", "Redragon", null,
+            "This keyboard's app doesn't let other programs set its colours. Open it with the keyboard on its cable, pick a steady "
+            + "effect, untick RGB, set the colour and press Apply: the keyboard keeps it after the app closes."),
         ("^Alienware Command Center", "Alienware Command Center", null, NoWayIn),
         ("^(Corsair )?iCUE", "Corsair iCUE", null, NoWayIn),
         ("^(ASUS )?Armoury Crate", "Armoury Crate", null, NoWayIn),
@@ -130,12 +133,16 @@ public static class Rgb
     // Known apps found in the Start menu, plus the ones Optimiser can reach that aren't in it.
     public static List<RgbApp> Match(IEnumerable<(string Name, string AppId)> startApps, IEnumerable<Lighting> reachable)
     {
-        var usable = startApps.Where(a => !Regex.IsMatch(a.Name, "uninstall|update|readme|help|manual", RegexOptions.IgnoreCase)
+        // By the shortcut's program too, so an updater (Redragon's rewrites the keyboard's firmware) is never picked.
+        var usable = startApps.Where(a => !Regex.IsMatch(a.Name + " " + Path.GetFileName(a.AppId),
+                                                         "unins|update|upgrade|firmware|readme|help|manual", RegexOptions.IgnoreCase)
                                           && !a.AppId.Contains('"')).ToList();
         var apps = new List<RgbApp>();
         foreach (var known in Known)
         {
-            var found = usable.FirstOrDefault(a => Regex.IsMatch(a.Name, known.Pattern, RegexOptions.IgnoreCase));
+            // The program's path as well as the name: Redragon's shortcut may just say OemDrv or the keyboard's model.
+            var found = usable.FirstOrDefault(a => Regex.IsMatch(a.Name, known.Pattern, RegexOptions.IgnoreCase)
+                                                || Regex.IsMatch(a.AppId, known.Pattern, RegexOptions.IgnoreCase));
             if (found.Name != null) apps.Add(new(found.Name, $@"shell:AppsFolder\{found.AppId}", known.Lighting, known.Hint));
             else if (known.Lighting != null && reachable.Contains(known.Lighting)) apps.Add(new(known.Name, null, known.Lighting, known.Hint));
         }
@@ -250,13 +257,13 @@ public class Razer : Lighting
     static readonly string[] Folders = [Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                                         Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)];
     string? session;
-    Color? shown;
 
     public override string? Missing =>
         Folders.Any(f => Directory.Exists(Path.Combine(f, "Razer Chroma SDK"))) ? null : "Razer Chroma isn't installed with Synapse.";
 
     public override void Show(Color c)
     {
+        List<long> results;
         try
         {
             if (session == null)
@@ -269,20 +276,17 @@ public class Razer : Lighting
                     device_supported = Devices,
                     category = "application",
                 });
+                if (Result(reply) is var refused and not 0) throw new InvalidOperationException(Why(refused));
                 session = Session(reply) ?? throw new InvalidOperationException("Razer Chroma gave an address that isn't on this PC.");
-                shown = null;
                 Thread.Sleep(1500); // a new session ignores effects for a moment
             }
-            if (shown != c)
+            // Every round, not once: Chroma can drop an effect, or hand the lighting to another app for a moment.
+            var effect = new { effect = "CHROMA_STATIC", param = new { color = Bgr(c) } };
+            results = Devices.Select(device =>
             {
-                // A device type that isn't plugged in just answers with an error code, which is fine.
-                foreach (var device in Devices)
-                {
-                    try { Rgb.Send(HttpMethod.Put, $"{session}/{device}", new { effect = "CHROMA_STATIC", param = new { color = Bgr(c) } }); }
-                    catch (HttpRequestException e) when (e.StatusCode != null) { } // turned down, e.g. none of that kind plugged in
-                }
-                shown = c;
-            }
+                try { return Result(Rgb.Send(HttpMethod.Put, $"{session}/{device}", effect)); }
+                catch (HttpRequestException e) when (e.StatusCode != null) { return NotConnected; }
+            }).ToList();
             Rgb.Send(HttpMethod.Put, session + "/heartbeat");
         }
         catch
@@ -291,6 +295,9 @@ public class Razer : Lighting
             catch { session = null; }
             throw;
         }
+        // A device type that isn't plugged in is turned down as a matter of course; a refusal like Chroma Apps being off
+        // hits every one. The session stays, so the colour goes through the round after it's switched on.
+        if (!results.Contains(0)) throw new InvalidOperationException(Why(results.FirstOrDefault(r => r is not (NotConnected or NotAvailable))));
     }
 
     public override void Release()
@@ -300,6 +307,26 @@ public class Razer : Lighting
     }
 
     public static int Bgr(Color c) => c.B << 16 | c.G << 8 | c.R;
+
+    const long NotConnected = 1167, NotAvailable = 4319, Disabled = 4309; // Chroma's RZRESULT codes
+
+    // Chroma answers 200 with {"result": N}, 0 when it's done; replies without one (a new session) count as done.
+    public static long Result(string reply)
+    {
+        try
+        {
+            using var json = JsonDocument.Parse(reply);
+            return json.RootElement.TryGetProperty("result", out var r) ? r.GetInt64() : 0;
+        }
+        catch { return 0; }
+    }
+
+    static string Why(long result) => result switch
+    {
+        0 => "Razer Chroma answered, but no Razer device took the colour.",
+        Disabled => "Razer Chroma turned it down: Chroma Apps is off.",
+        _ => $"Razer Chroma turned it down (error {result}).",
+    };
 
     // The session's own address from Chroma's reply, only if it's on this PC.
     public static string? Session(string reply)
