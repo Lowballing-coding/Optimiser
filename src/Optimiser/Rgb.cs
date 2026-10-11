@@ -221,8 +221,13 @@ public class SteelSeries : Lighting
     {
         Dictionary<string, string> Handler(string device, string zone) => new()
             { ["device-type"] = device, ["zone"] = zone, ["mode"] = "context-color", ["context-frame-key"] = "colour" };
-        string[] zones = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
-        return [Handler("rgb-per-key-zones", "all"), .. zones.Select(z => Handler("rgb-zoned-device", z))];
+        string[] zones = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+                          "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+                          "twenty-one", "twenty-two", "twenty-three", "twenty-four"];
+        // Each zoned type by name: the catch-all "rgb-zoned-device" didn't reach an MSI laptop's light bar, which GameSense
+        // lists as rgb-24-zone (Mystic Light). Mice, headsets and mouse mats are the smaller ones.
+        int[] sizes = [1, 2, 3, 5, 8, 12, 17, 24];
+        return [Handler("rgb-per-key-zones", "all"), .. sizes.SelectMany(n => zones.Take(n).Select(z => Handler($"rgb-{n}-zone", z)))];
     }
 
     // "address" in coreProps.json, only if it's on this PC. The file is in ProgramData, where any program can write.
