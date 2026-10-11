@@ -87,6 +87,21 @@
       </Setter>
     </Style>
 
+    <!-- Thin orange bar on a dark track -->
+    <Style x:Key="Bar" TargetType="ProgressBar">
+      <Setter Property="Height" Value="6" />
+      <Setter Property="Maximum" Value="100" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ProgressBar">
+            <Border x:Name="PART_Track" Background="{StaticResource Line}" CornerRadius="3">
+              <Border x:Name="PART_Indicator" Background="{StaticResource Accent}" CornerRadius="3" HorizontalAlignment="Left" />
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <!-- Text box with a hint shown while it's empty (the hint goes in Tag) -->
     <Style x:Key="Field" TargetType="TextBox">
       <Setter Property="Foreground" Value="{StaticResource Text}" />
@@ -467,6 +482,12 @@
                   <TextBlock x:Name="VersionText" FontSize="16" FontWeight="SemiBold" />
                   <TextBlock x:Name="UpdateText" Style="{StaticResource MutedText}" FontSize="13" Margin="0,4,0,0" />
                 </StackPanel>
+              </DockPanel>
+              <DockPanel x:Name="UpdateProgress" Visibility="Collapsed" Margin="0,16,0,0">
+                <TextBlock x:Name="UpdatePercent" DockPanel.Dock="Right" Width="44" TextAlignment="Right" FontSize="13"
+                           FontWeight="SemiBold" VerticalAlignment="Center" />
+                <ProgressBar x:Name="UpdateBar" Style="{StaticResource Bar}" VerticalAlignment="Center"
+                             AutomationProperties.Name="Update download" />
               </DockPanel>
               <StackPanel x:Name="WhatsNew" Visibility="Collapsed">
                 <Border Height="1" Background="{StaticResource Line}" Margin="0,18,0,16" />
