@@ -230,6 +230,7 @@
             <RadioButton Style="{StaticResource Nav}" Content="&#xE7FC;" Tag="Games" Checked="OnNav" />
             <RadioButton Style="{StaticResource Nav}" Content="&#xE9D9;" Tag="Stats" Checked="OnNav" />
             <RadioButton Style="{StaticResource Nav}" Content="&#xE81C;" Tag="Backups" Checked="OnNav" />
+            <RadioButton x:Name="RgbNav" Style="{StaticResource Nav}" Content="&#xE790;" Tag="RGB" Checked="OnNav" />
           </StackPanel>
         </DockPanel>
       </Border>
@@ -245,7 +246,8 @@
       <TextBlock x:Name="PageTitle" Margin="28,0,0,0" VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold"
                  Foreground="{StaticResource Accent}" />
       <TextBlock x:Name="StatusText" Margin="24,0,16,0" VerticalAlignment="Center" FontSize="13"
-                 Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
+                 Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis"
+                 ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
     </DockPanel>
 
     <Grid x:Name="Pages" Grid.Row="1" Grid.Column="1" Margin="28,12,28,0">
@@ -444,6 +446,8 @@
         </Grid>
       </DockPanel>
 
+      <local:RgbPage x:Name="RGB" Visibility="Collapsed" />
+
       <ScrollViewer x:Name="Settings" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="0,0,14,28">
           <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left"
@@ -489,7 +493,7 @@
           <ItemsControl x:Name="ProfileSettings" ItemTemplate="{StaticResource RowCard}" />
 
           <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="2,16,0,0">
-            Tip: Ctrl+1 to Ctrl+6 jump straight to each page.
+            Tip: Ctrl+1 to Ctrl+7 jump straight to each page.
             <Hyperlink Click="OnOpenGitHub" Foreground="{StaticResource Accent}">See every change on GitHub</Hyperlink>
           </TextBlock>
         </StackPanel>

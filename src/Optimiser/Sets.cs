@@ -23,12 +23,13 @@ public static class Sets
         catch (JsonException) { return []; }
     }
 
-    // Saving under a name that's already there updates that set, keeping its place.
-    public static void Save(string name, List<string> items)
+    // Saving under a name that's already there updates that set, keeping its place. Items it had that aren't on
+    // this PC right now (shown: the ones that are) stay in it, say the GPU tweak while in Discrete Graphics Mode.
+    public static void Save(string name, List<string> items, IEnumerable<string> shown)
     {
         var sets = Load();
         var i = sets.FindIndex(s => Same(s.Name, name));
-        if (i >= 0) sets[i] = new(name, items);
+        if (i >= 0) sets[i] = new(name, [.. items, .. sets[i].Items.Except(shown).Except(items)]);
         else sets.Add(new(name, items));
         Store(sets);
     }

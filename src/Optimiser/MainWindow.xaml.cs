@@ -290,10 +290,17 @@ public partial class MainWindow : Window
         var set = (SetRow)box.DataContext;
         var on = box.IsChecked == true;
         var todo = Sets.ToFlip(set, setRows, on);
-        var kept = on ? [] : set.Rows.Where(r => r.On && !todo.Contains(r)).Select(r => r.Name).ToList();
+        if (todo.Count == 0)
+        {
+            StatusText.Text = on ? $"None of {set.Name}'s optimisations are on this PC."
+                : $"{set.Name} stays on: another set that's on has everything in it, or Windows already had it that way.";
+            Refresh(); // puts the switch back
+            return;
+        }
+        var kept = on ? 0 : set.Rows.Count(r => r.On && !todo.Contains(r));
         await FlipAll([.. todo.Select(r => r.Item)], on, $"Turning {(on ? "on" : "off")} {set.Name}…",
-            $"Turned {(on ? "on" : "off")} {set.Name}." + (kept.Count == 0 ? ""
-                : $" {string.Join(", ", kept)} stayed on, because another set that's on has {(kept.Count == 1 ? "it" : "them")} or Windows already had {(kept.Count == 1 ? "it" : "them")} on."));
+            $"Turned {(on ? "on" : "off")} {set.Name}." + (kept == 0 ? ""
+                : $" {kept} stayed on because another set that's on has {(kept == 1 ? "it" : "them")}, or Windows already had {(kept == 1 ? "it" : "them")} on."));
     }
 
     async void OnSaveSet(object sender, RoutedEventArgs e)
@@ -306,7 +313,7 @@ public partial class MainWindow : Window
             SetName.Focus();
         }
         else if (items.Count == 0) StatusText.Text = "Nothing is switched on yet. Turn on what you want in the set, then save it.";
-        else if (await Change($"Saving {name}…", () => Sets.Save(name, items), $"Saved {name} with {items.Count} optimisation{(items.Count == 1 ? "" : "s")}."))
+        else if (await Change($"Saving {name}…", () => Sets.Save(name, items, rows.Select(r => r.Name)), $"Saved {name} with {items.Count} optimisation{(items.Count == 1 ? "" : "s")}."))
             SetName.Clear();
     }
 
@@ -649,6 +656,9 @@ public partial class MainWindow : Window
         var sample = SetCandidates.ToList();
         SetList.ItemsSource = new[] { new SetRow("Gaming", sample), new SetRow("Everyday", [.. sample.Take(2)]) };
         await Save("Optimisations with sets");
+        RGB.ShowSample();
+        RgbNav.IsChecked = true;
+        await Save("RGB with apps found");
         Sidebar.Width = SidebarOpen; // as it looks while hovered
         await Save("Sidebar");
         App.Quit();

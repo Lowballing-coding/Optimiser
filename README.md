@@ -30,6 +30,8 @@ It asks for administrator rights because every tweak changes a system setting.
 
 **Live stats.** GPU temperature, load, clock, power and memory (Nvidia only), CPU load, memory and power source, updated every second. The GPU is only read while the Stats page is open, because reading it keeps a laptop's RTX GPU awake. There's no CPU temperature: reading it needs a third-party kernel driver, which isn't worth the risk for this.
 
+**RGB.** One page for every RGB app on the PC. Pick a colour and Optimiser shows it on SteelSeries GG (MSI laptop keyboards and SteelSeries gear), Razer Synapse (Razer Chroma, plus anything linked with Chroma Connect, like a Wooting keyboard) and Logitech G HUB, using the ways each app offers other programs, and keeps it there while it runs. **Hand back to each app** puts their own lighting back. Apps without a way in (Wootility, Redragon, iCUE, Armoury Crate and others) get a button that opens them.
+
 ## Running in the background
 
 Switch on **Run in the background and start with Windows** (it's in the recommendations). Optimiser then:

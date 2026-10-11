@@ -180,10 +180,11 @@ Games.SetProfile(hades, true);
 Check(Games.ProfileOn(hades), "and back on");
 
 // Optimisation sets: saved by name, updated in place, and switching one off leaves what another set that's on needs.
-Sets.Save("Gaming", ["A", "B"]);
-Sets.Save("Everyday", ["A"]);
-Sets.Save(" gaming ", ["A", "B", "C"]);
-Check(Sets.Load() is [{ Name: " gaming ", Items.Count: 3 }, { Name: "Everyday" }], "saving under the same name updates that set in place");
+Sets.Save("Gaming", ["A", "B", "GPU"], []);
+Sets.Save("Everyday", ["A"], []);
+Sets.Save(" gaming ", ["A", "C"], ["A", "B", "C"]);
+Check(Sets.Load() is [{ Name: " gaming ", Items: ["A", "C", "GPU"] }, { Name: "Everyday" }],
+    "saving under the same name updates that set in place, keeping what isn't on this PC right now");
 Sets.Delete("GAMING");
 Check(Sets.Load() is [{ Name: "Everyday" }], "deletes a set by name");
 Sets.Delete("Everyday");
@@ -257,6 +258,30 @@ Check(update is { Size: 70000000, Sha256: "abc123", Notes: "Settings page" } && 
 Check(Updates.Parse(release, new Version(1, 0, 12)) == null, "no update when already on that version");
 Check(Updates.Parse(release.Replace("Lowballing-coding/Optimiser/releases", "someone/else/releases"), new Version(1, 0, 9)) == null,
     "ignores a download from anywhere else");
+
+// RGB: Optimiser only talks to lighting apps on this PC and only loads G HUB's DLL from Program Files.
+Check(SteelSeries.Address("""{"address": "127.0.0.1:51248", "encryptedAddress": "127.0.0.1:51249"}""") == "http://127.0.0.1:51248/"
+      && SteelSeries.Address("""{"address": "example.com:80"}""") == null && SteelSeries.Address("half wr") == null,
+      "uses GameSense's address only if it's on this PC");
+Check(Razer.Session("""{"sessionid": 3486, "uri": "http://localhost:55235/chromasdk"}""") == "http://localhost:55235/chromasdk"
+      && Razer.Session("""{"sessionid": 1, "uri": "http://example.com/chromasdk"}""") == null,
+      "uses Razer Chroma's session address only if it's on this PC");
+Check(Razer.Bgr(System.Windows.Media.Color.FromRgb(0xFF, 0x8A, 0x1F)) == 0x1F8AFF, "Razer colours are blue, green, red");
+var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+Check(Logitech.InProgramFiles(Path.Combine(programFiles, @"LGHUB\sdks\sdk_legacy_led_x64.dll"))
+      && !Logitech.InProgramFiles(@"C:\Users\Public\sdk_legacy_led_x64.dll")
+      && !Logitech.InProgramFiles(Path.Combine(programFiles, @"..\Users\Public\x.dll"))
+      && !Logitech.InProgramFiles(programFiles + @"Evil\x.dll"),
+      "only loads the Logitech DLL from Program Files");
+var startMenu = StartMenu.Apps();
+Console.WriteLine($"{startMenu.Count} Start menu apps, e.g. {string.Join(", ", startMenu.Take(3))}");
+Check(startMenu.All(a => a.Name != "" && a.AppId != ""), "reads the Start menu without PowerShell");
+var rgbApps = Rgb.Match([("SteelSeries GG", "a"), ("Razer Synapse Uninstall", "b"), ("Razer Synapse", "c"), ("Notepad", "d"),
+                         ("Wootility", "e\""), ("Wootility", "e")], [Rgb.LogitechGHub]);
+Check(rgbApps.Select(a => a.Name).SequenceEqual(["SteelSeries GG", "Razer Synapse", "Logitech G HUB", "Wootility"])
+      && rgbApps[1] is { Open: @"shell:AppsFolder\c", Lighting: Razer } && rgbApps[2] is { Open: null, Lighting: Logitech }
+      && rgbApps[3] is { Open: @"shell:AppsFolder\e", Lighting: null },
+      "finds RGB apps in the Start menu, and ones Optimiser can reach that aren't in it");
 
 Directory.Delete(temp, true);
 Registry.CurrentUser.DeleteSubKeyTree(sub);
