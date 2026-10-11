@@ -218,6 +218,7 @@ AutoStart.TurnOn(fakeGame);
 Check(new FileInfo(AutoStart.InstalledExe).Length == new FileInfo(fakeGame).Length, "a newer copy replaces the installed one");
 AutoStart.TurnOn(unversioned);
 Check(new FileInfo(AutoStart.InstalledExe).Length == new FileInfo(fakeGame).Length, "an older copy doesn't roll it back");
+Check(AutoStart.InstalledIsAtLeast(fakeGame) && AutoStart.InstalledIsAtLeast(unversioned), "the installed copy can stand in for one no newer");
 AutoStart.TurnOff();
 Check(!AutoStart.IsOn() && !Directory.Exists(AutoStart.InstallFolder), "turning it off removes both");
 
