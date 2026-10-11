@@ -565,22 +565,18 @@ public partial class MainWindow : Window
         if (App.Update is not { } update || busy) return;
         busy = true; // no tweak changes mid-install
         CheckButton.IsEnabled = InstallButton.IsEnabled = false;
-        var progress = new Progress<int>(p =>
-        {
-            StatusText.Text = $"Downloading Optimiser {update.Version}… {p}%";
-            ShowProgress(p);
-        });
+        var progress = new Progress<int>(p => ShowProgress(p)); // shown on the update card, not the top bar
         UpdateText.Text = $"Downloading Optimiser {update.Version}…";
         ShowProgress(0);
         try
         {
             await Task.Run(() => Updates.Install(update, progress));
-            StatusText.Text = UpdateText.Text = $"Installed Optimiser {update.Version}. It opens in a moment and closes this one.";
+            UpdateText.Text = $"Installed Optimiser {update.Version}. It opens in a moment and closes this one.";
             CheckButton.IsEnabled = true;
         }
         catch (Exception ex)
         {
-            StatusText.Text = UpdateText.Text = $"Couldn't install the update: {ex.Message}";
+            UpdateText.Text = $"Couldn't install the update: {ex.Message}";
             ShowProgress(null);
             CheckButton.IsEnabled = InstallButton.IsEnabled = true;
         }
