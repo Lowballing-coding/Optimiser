@@ -565,19 +565,34 @@ public partial class MainWindow : Window
         if (App.Update is not { } update || busy) return;
         busy = true; // no tweak changes mid-install
         CheckButton.IsEnabled = InstallButton.IsEnabled = false;
-        var progress = new Progress<int>(p => StatusText.Text = $"Downloading Optimiser {update.Version}… {p}%");
+        var progress = new Progress<int>(p =>
+        {
+            StatusText.Text = $"Downloading Optimiser {update.Version}… {p}%";
+            ShowProgress(p);
+        });
+        UpdateText.Text = $"Downloading Optimiser {update.Version}…";
+        ShowProgress(0);
         try
         {
             await Task.Run(() => Updates.Install(update, progress));
-            StatusText.Text = $"Installed Optimiser {update.Version}. It opens in a moment and closes this one.";
+            StatusText.Text = UpdateText.Text = $"Installed Optimiser {update.Version}. It opens in a moment and closes this one.";
             CheckButton.IsEnabled = true;
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Couldn't install the update: {ex.Message}";
+            StatusText.Text = UpdateText.Text = $"Couldn't install the update: {ex.Message}";
+            ShowProgress(null);
             CheckButton.IsEnabled = InstallButton.IsEnabled = true;
         }
         busy = false;
+    }
+
+    // The bar under the update card while an update downloads; null hides it.
+    void ShowProgress(int? percent)
+    {
+        UpdateProgress.Visibility = percent == null ? Visibility.Collapsed : Visibility.Visible;
+        UpdateBar.Value = percent ?? 0;
+        UpdatePercent.Text = $"{percent}%";
     }
 
     void OnOpenGitHub(object sender, RoutedEventArgs e) => Tweaks.OpenAsYou("https://github.com/Lowballing-coding/Optimiser/commits/main");
@@ -641,6 +656,10 @@ public partial class MainWindow : Window
         }
         ShowUpdate(new Release(new Version(1, 0, 99), "", 0, null, "Settings page with update checks\nRemembers where you left the window"));
         await Save("Settings with an update");
+        UpdateText.Text = "Downloading Optimiser 1.0.99…";
+        ShowProgress(42);
+        await Save("Settings installing an update");
+        ShowProgress(null);
         ((RadioButton)Nav.Children[2]).IsChecked = true;
         GameList.ItemsSource = new[]
         {
