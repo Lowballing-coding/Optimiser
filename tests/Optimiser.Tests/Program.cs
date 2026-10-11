@@ -179,6 +179,25 @@ Check(!Games.ProfileOn(hades) && Games.ProfileOn(hades with { Folder = @"C:\Game
 Games.SetProfile(hades, true);
 Check(Games.ProfileOn(hades), "and back on");
 
+// Optimisation sets: saved by name, updated in place, and switching one off leaves what another set that's on needs.
+Sets.Save("Gaming", ["A", "B", "GPU"], []);
+Sets.Save("Everyday", ["A"], []);
+Sets.Save(" gaming ", ["A", "C"], ["A", "B", "C"]);
+Check(Sets.Load() is [{ Name: " gaming ", Items: ["A", "C", "GPU"] }, { Name: "Everyday" }],
+    "saving under the same name updates that set in place, keeping what isn't on this PC right now");
+Sets.Delete("GAMING");
+Check(Sets.Load() is [{ Name: "Everyday" }], "deletes a set by name");
+Sets.Delete("Everyday");
+Row SetItem(string name, bool on, bool canSwitch = true) =>
+    new(new Optimisation { Name = name, Description = "", Group = "", IsOn = () => on, TurnOn = () => { } }, on, canSwitch, null);
+var (a, b, c, d) = (SetItem("A", true), SetItem("B", true), SetItem("C", false), SetItem("D", true, canSwitch: false));
+var gaming = new SetRow("Gaming", [a, b, c, d]);
+var everyday = new SetRow("Everyday", [a]);
+Check(!gaming.On && everyday.On, "a set is on when everything in it is");
+Check(Sets.ToFlip(gaming, [gaming, everyday], on: true) is [{ Name: "C" }], "switching a set on turns on only what's off");
+Check(Sets.ToFlip(gaming, [gaming, everyday], on: false) is [{ Name: "B" }],
+    "switching it off leaves what another set that's on has, and what Windows already had");
+
 // The per-game GPU setting keeps Windows' other options in the same value, and undo puts it back.
 const string gpuKey = @"Software\Microsoft\DirectX\UserGpuPreferences";
 using (var k = Registry.CurrentUser.CreateSubKey(gpuKey)) k.SetValue(fakeGame, "SwapEffectUpgradeEnable=1;GpuPreference=1;");
