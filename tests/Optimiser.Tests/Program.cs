@@ -267,6 +267,9 @@ Check(Razer.Session("""{"sessionid": 3486, "uri": "http://localhost:55235/chroma
       && Razer.Session("""{"sessionid": 1, "uri": "http://example.com/chromasdk"}""") == null,
       "uses Razer Chroma's session address only if it's on this PC");
 Check(Razer.Bgr(System.Windows.Media.Color.FromRgb(0xFF, 0x8A, 0x1F)) == 0x1F8AFF, "Razer colours are blue, green, red");
+Check(Razer.Result("""{"result": 4309}""") == 4309 && Razer.Result("""{"result": 2147500037}""") == 2147500037
+      && Razer.Result("""{"sessionid": 1, "uri": "http://localhost:55235/chromasdk"}""") == 0 && Razer.Result("") == 0,
+      "reads Razer Chroma's answer code");
 var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
 Check(Logitech.InProgramFiles(Path.Combine(programFiles, @"LGHUB\sdks\sdk_legacy_led_x64.dll"))
       && !Logitech.InProgramFiles(@"C:\Users\Public\sdk_legacy_led_x64.dll")
@@ -282,6 +285,10 @@ Check(rgbApps.Select(a => a.Name).SequenceEqual(["SteelSeries GG", "Razer Synaps
       && rgbApps[1] is { Open: @"shell:AppsFolder\c", Lighting: Razer } && rgbApps[2] is { Open: null, Lighting: Logitech }
       && rgbApps[3] is { Open: @"shell:AppsFolder\e", Lighting: null },
       "finds RGB apps in the Start menu, and ones Optimiser can reach that aren't in it");
+var redragon = Rgb.Match([("K530RGB Pro Firmware", @"{7C5A40EF-A0FB-4BFC-874A-C0F2E0B9FA8E}\Redragon K530RGB Pro\Old\Update.exe"),
+                          ("OemDrv", @"{7C5A40EF-A0FB-4BFC-874A-C0F2E0B9FA8E}\Redragon K530RGB Pro\devtray.exe")], []);
+Check(redragon is [{ Name: "OemDrv", Lighting: null, Open: @"shell:AppsFolder\{7C5A40EF-A0FB-4BFC-874A-C0F2E0B9FA8E}\Redragon K530RGB Pro\devtray.exe" }],
+      "finds an RGB app by its program's folder too, but never its updater");
 
 Directory.Delete(temp, true);
 Registry.CurrentUser.DeleteSubKeyTree(sub);
