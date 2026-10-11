@@ -567,9 +567,10 @@ public partial class MainWindow : Window
         CheckButton.IsEnabled = InstallButton.IsEnabled = false;
         var progress = new Progress<int>(p =>
         {
-            StatusText.Text = UpdateText.Text = $"Downloading Optimiser {update.Version}… {p}%";
+            StatusText.Text = $"Downloading Optimiser {update.Version}… {p}%";
             ShowProgress(p);
         });
+        UpdateText.Text = $"Downloading Optimiser {update.Version}…";
         ShowProgress(0);
         try
         {
@@ -655,7 +656,7 @@ public partial class MainWindow : Window
         }
         ShowUpdate(new Release(new Version(1, 0, 99), "", 0, null, "Settings page with update checks\nRemembers where you left the window"));
         await Save("Settings with an update");
-        UpdateText.Text = "Downloading Optimiser 1.0.99… 42%";
+        UpdateText.Text = "Downloading Optimiser 1.0.99…";
         ShowProgress(42);
         await Save("Settings installing an update");
         ShowProgress(null);
