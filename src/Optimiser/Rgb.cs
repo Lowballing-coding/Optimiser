@@ -255,9 +255,9 @@ public class SteelSeries : Lighting
         string[] zones = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
                           "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
                           "twenty-one", "twenty-two", "twenty-three", "twenty-four"];
-        // Each zoned type by name: the catch-all "rgb-zoned-device" didn't reach an MSI laptop's light bar, which GameSense
-        // lists as rgb-24-zone (Mystic Light). Mice, headsets and mouse mats are the smaller ones.
-        int[] sizes = [1, 2, 3, 5, 8, 12, 17, 24];
+        // Each zoned type by name, the documented ones plus 4, 6, 7 and 10, which GG also uses but doesn't document. An
+        // MSI laptop's light bar ("MSI AURORA" in GG) is its own device and may sit behind one of those.
+        int[] sizes = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 17, 24];
         return [Handler("rgb-per-key-zones", "all"), .. sizes.SelectMany(n => zones.Take(n).Select(z => Handler($"rgb-{n}-zone", z)))];
     }
 
