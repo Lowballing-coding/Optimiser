@@ -23,7 +23,8 @@ public record RgbRound(Color? Colour, IReadOnlyDictionary<Lighting, string?> Res
 // seconds for as long as Optimiser runs, and the colour is saved so it comes back after a restart.
 public static class Rgb
 {
-    public const string ColourSetting = "RgbColour"; // "#RRGGBB" while Optimiser is showing a colour
+    public const string ColourSetting = "RgbColour"; // "#RRGGBB" or "rainbow" while Optimiser is showing a colour
+    public static readonly Color Rainbow = Color.FromArgb(0, 0, 0, 0); // not a colour: picks the rainbow
     public static readonly Lighting SteelSeriesGG = new SteelSeries(), RazerChroma = new Razer(), LogitechGHub = new Logitech();
     static readonly Lighting[] Lightings = [SteelSeriesGG, RazerChroma, LogitechGHub];
 
@@ -66,7 +67,8 @@ public static class Rgb
     {
         try
         {
-            if (Settings.GetText(ColourSetting) is { } saved) colour = (Color)ColorConverter.ConvertFromString(saved);
+            if (Settings.GetText(ColourSetting) is { } saved)
+                colour = saved == "rainbow" ? Rainbow : (Color)ColorConverter.ConvertFromString(saved);
         }
         catch { } // not a colour; start with each app's own lighting
         new Thread(Loop) { IsBackground = true, Name = "RGB" }.Start();
@@ -74,28 +76,48 @@ public static class Rgb
 
     public static void Set(Color? c)
     {
-        Settings.SetText(ColourSetting, c is { } x ? Hex(x) : null);
+        Settings.SetText(ColourSetting, c == Rainbow ? "rainbow" : c is { } x ? Hex(x) : null);
         lock (gate) colour = c;
         wake.Set();
     }
 
     public static string Hex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
+    // The rainbow's colour at this moment: once round the colour wheel every 10 seconds.
+    public static Color RainbowAt(long ms)
+    {
+        var h = ms % 10000 / 10000.0 * 6; // which sixth of the wheel, and how far into it
+        var x = (byte)Math.Round(255 * (1 - Math.Abs(h % 2 - 1)));
+        return (int)h switch
+        {
+            0 => Color.FromRgb(255, x, 0), 1 => Color.FromRgb(x, 255, 0), 2 => Color.FromRgb(0, 255, x),
+            3 => Color.FromRgb(0, x, 255), 4 => Color.FromRgb(x, 0, 255), _ => Color.FromRgb(255, 0, x),
+        };
+    }
+
     static void Loop()
     {
         var showing = new HashSet<Lighting>();
+        var retry = new Dictionary<Lighting, long>(); // during the rainbow, when to try an app that failed again
         while (true)
         {
             var c = Colour;
+            if (c != Last.Colour) retry.Clear();
             var results = new Dictionary<Lighting, string?>();
             foreach (var lighting in Lightings)
             {
+                // One app that doesn't answer mustn't hold the rainbow up on the others for seconds at a time.
+                if (retry.TryGetValue(lighting, out var at) && Environment.TickCount64 < at)
+                {
+                    results[lighting] = Last.Results[lighting];
+                    continue;
+                }
                 try
                 {
                     if (c is { } x)
                     {
                         showing.Add(lighting);
-                        if ((results[lighting] = lighting.Missing) == null) lighting.Show(x);
+                        if ((results[lighting] = lighting.Missing) == null) lighting.Show(x == Rainbow ? RainbowAt(Environment.TickCount64) : x);
                     }
                     else if (showing.Remove(lighting)) lighting.Release();
                 }
@@ -107,12 +129,14 @@ public static class Rgb
                         HttpRequestException or TaskCanceledException => "It isn't running, or didn't answer.",
                         _ => e.Message,
                     };
+                    if (c == Rainbow) retry[lighting] = Environment.TickCount64 + 5000;
                 }
             }
             var changed = c != Last.Colour || !results.SequenceEqual(Last.Results);
             Last = new(c, results);
-            if (changed) Changed?.Invoke(); // not every 5 seconds, so the page isn't redrawn for nothing
-            wake.WaitOne(c == null ? Timeout.Infinite : 5000); // Razer gives up after 15 seconds without a word
+            if (changed) Changed?.Invoke(); // not every round, so the page isn't redrawn for nothing
+            // Razer gives up after 15 seconds without a word; the rainbow moves on a little every tenth of a second.
+            wake.WaitOne(c == null ? Timeout.Infinite : c == Rainbow ? 100 : 5000);
         }
     }
 
