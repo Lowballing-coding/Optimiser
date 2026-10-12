@@ -268,6 +268,10 @@ Check(Razer.Session("""{"sessionid": 3486, "uri": "http://localhost:55235/chroma
       && Razer.Session("""{"sessionid": 1, "uri": "http://example.com/chromasdk"}""") == null,
       "uses Razer Chroma's session address only if it's on this PC");
 Check(Razer.Bgr(System.Windows.Media.Color.FromRgb(0xFF, 0x8A, 0x1F)) == 0x1F8AFF, "Razer colours are blue, green, red");
+Check(Rgb.RainbowAt(0) == System.Windows.Media.Color.FromRgb(255, 0, 0) && Rgb.RainbowAt(3333) == System.Windows.Media.Color.FromRgb(0, 255, 0)
+      && Rgb.RainbowAt(5000) == System.Windows.Media.Color.FromRgb(0, 255, 255) && Rgb.RainbowAt(10000) == Rgb.RainbowAt(0)
+      && Rgb.RainbowAt(1234) != Rgb.Rainbow,
+      "the rainbow goes round the colour wheel every 10 seconds");
 Check(Razer.Result("""{"result": 4309}""") == 4309 && Razer.Result("""{"result": 2147500037}""") == 2147500037
       && Razer.Result("""{"sessionid": 1, "uri": "http://localhost:55235/chromasdk"}""") == 0 && Razer.Result("") == 0,
       "reads Razer Chroma's answer code");

@@ -29,8 +29,11 @@ public partial class RgbPage : UserControl
         ("cyan", Color.FromRgb(0x00, 0xC8, 0xFF)),
         ("green", Color.FromRgb(0x00, 0xE0, 0x5A)),
         ("white", Colors.White),
+        ("rainbow", Rgb.Rainbow),
         ("off", Colors.Black),
     ];
+    static readonly Brush RainbowBrush = Frozen(new LinearGradientBrush(
+        new GradientStopCollection(Enumerable.Range(0, 7).Select(i => new GradientStop(Rgb.RainbowAt(i * 10000 / 6), i / 6.0))), 45));
     readonly Button custom;
     List<RgbApp>? apps; // null until the page is first opened
     bool looking, sample;
@@ -51,7 +54,7 @@ public partial class RgbPage : UserControl
         var button = new Button
         {
             Style = (Style)FindResource("Swatch"), Tag = c, ToolTip = name, Content = glyph,
-            Background = c is { } x ? new SolidColorBrush(x) : Paint("Surface"),
+            Background = c == Rgb.Rainbow ? RainbowBrush : c is { } x ? new SolidColorBrush(x) : Paint("Surface"),
             Foreground = c == Colors.Black ? Paint("Muted") : Paint("Text"),
         };
         AutomationProperties.SetName(button, name);
@@ -79,9 +82,9 @@ public partial class RgbPage : UserControl
         custom.Background = want is { } mine && preset == null ? new SolidColorBrush(mine) : Paint("Surface");
         custom.Content = preset == null && want != null ? "" : "";
         HandBack.IsEnabled = want != null;
-        SummaryDot.Fill = want is { } dot ? new SolidColorBrush(dot) : Brushes.Transparent;
+        SummaryDot.Fill = want == Rgb.Rainbow ? RainbowBrush : want is { } dot ? new SolidColorBrush(dot) : Brushes.Transparent;
 
-        var name = preset ?? (want is { } w ? Rgb.Hex(w) : "");
+        var name = preset == "rainbow" ? "the rainbow" : preset ?? (want is { } w ? Rgb.Hex(w) : "");
         var synced = (apps ?? []).Where(a => a.Lighting != null && last.Results.TryGetValue(a.Lighting, out var why) && why == null)
             .Select(a => a.Name).ToList();
         Summary.Text = want == null ? "Each app is showing its own lighting."
@@ -112,6 +115,12 @@ public partial class RgbPage : UserControl
 
     Brush Paint(string name) => (Brush)FindResource(name);
 
+    static Brush Frozen(Brush brush)
+    {
+        brush.Freeze();
+        return brush;
+    }
+
     void OnSwatch(object sender, RoutedEventArgs e)
     {
         if (((Button)sender).Tag is Color c)
@@ -119,7 +128,7 @@ public partial class RgbPage : UserControl
             Pick(c);
             return;
         }
-        var now = Rgb.Colour ?? Presets[0].Colour;
+        var now = Rgb.Colour is { A: 255 } picked ? picked : Presets[0].Colour; // the rainbow isn't one colour
         using var dialog = new Forms.ColorDialog { FullOpen = true, Color = System.Drawing.Color.FromArgb(now.R, now.G, now.B) };
         if (dialog.ShowDialog(new Owner(new WindowInteropHelper(Window.GetWindow(this)).Handle)) == Forms.DialogResult.OK) Pick(Color.FromRgb(dialog.Color.R, dialog.Color.G, dialog.Color.B));
     }
