@@ -61,6 +61,7 @@ public partial class MainWindow : Window
             // A pin made from the window starts this copy. Updates replace it in place, so the pin keeps working.
             try { Taskbar.SetIdentity(new WindowInteropHelper(this).Handle, Environment.ProcessPath!); }
             catch { } // only changes how the taskbar groups the window
+            HwndSource.FromHwnd(new WindowInteropHelper(this).Handle).AddHook(WorkArea.Hook);
         };
         Loaded += OnLoaded;
         Closed += (_, _) => stats?.Dispose();
@@ -596,8 +597,6 @@ public partial class MainWindow : Window
     void ShowState()
     {
         var maximised = WindowState == WindowState.Maximized;
-        // A borderless window hangs off the screen edge when maximised; pad it back in.
-        Root.Margin = maximised ? SystemParameters.WindowResizeBorderThickness : new Thickness(0);
         MaxButton.Content = maximised ? "" : "";
         MaxButton.ToolTip = maximised ? "Restore" : "Maximise";
     }
