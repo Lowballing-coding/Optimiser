@@ -601,10 +601,18 @@ public partial class MainWindow : Window
 
     StatTile? dragging;
     Point dragStart;
+    Vector grab; // where on the tile it was picked up
 
     StatTile? TileAt(Point p) => Tiles.Children.OfType<StatTile>().FirstOrDefault(t => LayoutInformation.GetLayoutSlot(t).Contains(p));
 
-    // Drag a stat tile to move it; the others shuffle round as it passes over them, and the order is kept.
+    static Point SlotOf(StatTile t) => LayoutInformation.GetLayoutSlot(t).TopLeft;
+
+    // Eases a value to its target, or jumps there when Windows animations are off.
+    static void Ease(IAnimatable target, DependencyProperty property, double? from, double to) =>
+        target.BeginAnimation(property, new DoubleAnimation(to, TimeSpan.FromMilliseconds(SystemParameters.ClientAreaAnimation ? 240 : 0))
+            { From = from, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+
+    // Drag a stat tile to move it: it lifts and follows the pointer, the others glide out of its way, and the order is kept.
     void OnTileDown(object sender, MouseButtonEventArgs e)
     {
         dragStart = e.GetPosition(Tiles);
@@ -620,15 +628,33 @@ public partial class MainWindow : Window
             if (Math.Abs(p.X - dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
                 && Math.Abs(p.Y - dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
             Tiles.CaptureMouse();
-            dragging.Opacity = 0.6;
             Tiles.Cursor = Cursors.SizeAll;
+            foreach (var t in Tiles.Children.OfType<StatTile>()) Panel.SetZIndex(t, t == dragging ? 1 : 0);
+            dragging.Move.BeginAnimation(TranslateTransform.XProperty, null); // follow the pointer, not a leftover glide
+            dragging.Move.BeginAnimation(TranslateTransform.YProperty, null);
+            grab = dragStart - SlotOf(dragging);
+            Ease(dragging.Lift, ScaleTransform.ScaleXProperty, null, 1.04);
+            Ease(dragging.Lift, ScaleTransform.ScaleYProperty, null, 1.04);
+            Ease(dragging, OpacityProperty, null, 0.92);
         }
         if (TileAt(p) is { } over && over != dragging)
         {
+            // Note where every tile is drawn now, move the tile in the grid, then glide the others from there to their new place.
+            var drawn = Tiles.Children.OfType<StatTile>().ToDictionary(t => t, t => SlotOf(t) + new Vector(t.Move.X, t.Move.Y));
             var i = Tiles.Children.IndexOf(over);
             Tiles.Children.Remove(dragging);
             Tiles.Children.Insert(i, dragging);
+            Tiles.UpdateLayout();
+            foreach (var (t, at) in drawn)
+            {
+                var shift = at - SlotOf(t);
+                if (t == dragging || shift.Length < 0.5) continue;
+                Ease(t.Move, TranslateTransform.XProperty, shift.X, 0);
+                Ease(t.Move, TranslateTransform.YProperty, shift.Y, 0);
+            }
         }
+        var slot = SlotOf(dragging);
+        (dragging.Move.X, dragging.Move.Y) = (p.X - grab.X - slot.X, p.Y - grab.Y - slot.Y);
     }
 
     void OnTileUp(object sender, MouseButtonEventArgs e)
@@ -639,10 +665,15 @@ public partial class MainWindow : Window
 
     void OnTileDrop(object sender, MouseEventArgs e)
     {
-        if (dragging == null) return;
-        dragging.Opacity = 1;
-        Tiles.Cursor = null;
+        if (dragging is not { } tile) return;
         dragging = null;
+        Tiles.Cursor = null;
+        // Settle into its new place.
+        Ease(tile.Move, TranslateTransform.XProperty, tile.Move.X, 0);
+        Ease(tile.Move, TranslateTransform.YProperty, tile.Move.Y, 0);
+        Ease(tile.Lift, ScaleTransform.ScaleXProperty, null, 1);
+        Ease(tile.Lift, ScaleTransform.ScaleYProperty, null, 1);
+        Ease(tile, OpacityProperty, null, 1);
         Optimiser.Settings.SetText(TileOrderSetting, string.Join("|", Tiles.Children.OfType<StatTile>().Select(t => t.Label)));
     }
 

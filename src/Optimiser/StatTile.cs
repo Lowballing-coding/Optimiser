@@ -18,6 +18,10 @@ public sealed class StatTile : Border
 
     public string Label { get; }
 
+    // Drag and slide animations move the tile with these, so its place in the grid stays put while it glides.
+    public readonly TranslateTransform Move = new();
+    public readonly ScaleTransform Lift = new();
+
     // Where a tile sits in an order saved as labels joined by "|"; tiles not in it go last, in their usual order.
     public static int Rank(string label, string? saved) =>
         Array.IndexOf(saved?.Split('|') ?? [], label) is var i and >= 0 ? i : int.MaxValue;
@@ -25,6 +29,8 @@ public sealed class StatTile : Border
     public StatTile(string label, bool showTrend)
     {
         Label = label;
+        RenderTransformOrigin = new Point(0.5, 0.5);
+        RenderTransform = new TransformGroup { Children = { Lift, Move } };
         Style = (Style)Application.Current.FindResource("Panel");
         Margin = new Thickness(6, 0, 6, 12);
         unit.Foreground = (Brush)Application.Current.FindResource("Muted");
