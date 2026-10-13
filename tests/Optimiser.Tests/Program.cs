@@ -295,6 +295,11 @@ var redragon = Rgb.Match([("K530RGB Pro Firmware", @"{7C5A40EF-A0FB-4BFC-874A-C0
 Check(redragon is [{ Name: "OemDrv", Lighting: null, Open: @"shell:AppsFolder\{7C5A40EF-A0FB-4BFC-874A-C0F2E0B9FA8E}\Redragon K530RGB Pro\devtray.exe" }],
       "finds an RGB app by its program's folder too, but never its updater");
 
+string[] tiles = ["GPU load", "CPU load", "Memory", "Power"];
+Check(tiles.OrderBy(t => StatTile.Rank(t, "Memory|GPU load")).SequenceEqual(["Memory", "GPU load", "CPU load", "Power"])
+      && tiles.OrderBy(t => StatTile.Rank(t, null)).SequenceEqual(tiles),
+      "stat tiles follow the saved order, with new ones after it in their usual order");
+
 Directory.Delete(temp, true);
 Registry.CurrentUser.DeleteSubKeyTree(sub);
 Console.WriteLine("All checks passed");
