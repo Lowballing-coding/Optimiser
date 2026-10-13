@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -40,6 +41,7 @@ public partial class MainWindow : Window
 {
     public const double SidebarOpen = 200; // sidebar width while hovered; 72 when closed
     const string PlacementSetting = "WindowPlacement";
+    const string TileOrderSetting = "StatTileOrder";
     bool busy, toldAboutTray;
     readonly List<RadioButton> modeButtons = [];
     List<Row> rows = [];        // every optimisation on the Optimisations page, as last drawn
@@ -367,11 +369,14 @@ public partial class MainWindow : Window
             stats = new Stats();
             var gpuTiles = new[] { gpuTemp, gpuLoad, gpuClock, gpuPower, vram };
             var first = stats.Read();
-            foreach (var tile in (first.GpuTemp == null ? [] : gpuTiles).Append(cpuLoad).Append(ram).Append(power))
+            var order = Optimiser.Settings.GetText(TileOrderSetting);
+            foreach (var tile in (first.GpuTemp == null ? [] : gpuTiles).Append(cpuLoad).Append(ram).Append(power)
+                         .OrderBy(t => StatTile.Rank(t.Label, order)))
                 Tiles.Children.Add(tile);
-            StatsIntro.Text = first.GpuTemp == null
+            StatsIntro.Text = (first.GpuTemp == null
                 ? "Live readings, updated every second. No Nvidia graphics driver was found, so there are no GPU readings."
-                : "Live readings, updated every second. Reading the RTX GPU keeps it awake, so Optimiser only reads it while this page is open.";
+                : "Live readings, updated every second. Reading the RTX GPU keeps it awake, so Optimiser only reads it while this page is open.")
+                + " Drag a tile to move it.";
         }
 
         var r = stats.Read();
@@ -593,6 +598,53 @@ public partial class MainWindow : Window
     }
 
     void OnOpenGitHub(object sender, RoutedEventArgs e) => Tweaks.OpenAsYou("https://github.com/Lowballing-coding/Optimiser/commits/main");
+
+    StatTile? dragging;
+    Point dragStart;
+
+    StatTile? TileAt(Point p) => Tiles.Children.OfType<StatTile>().FirstOrDefault(t => LayoutInformation.GetLayoutSlot(t).Contains(p));
+
+    // Drag a stat tile to move it; the others shuffle round as it passes over them, and the order is kept.
+    void OnTileDown(object sender, MouseButtonEventArgs e)
+    {
+        dragStart = e.GetPosition(Tiles);
+        dragging = TileAt(dragStart);
+    }
+
+    void OnTileMove(object sender, MouseEventArgs e)
+    {
+        if (dragging == null || e.LeftButton != MouseButtonState.Pressed) return;
+        var p = e.GetPosition(Tiles);
+        if (!Tiles.IsMouseCaptured)
+        {
+            if (Math.Abs(p.X - dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
+                && Math.Abs(p.Y - dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+            Tiles.CaptureMouse();
+            dragging.Opacity = 0.6;
+            Tiles.Cursor = Cursors.SizeAll;
+        }
+        if (TileAt(p) is { } over && over != dragging)
+        {
+            var i = Tiles.Children.IndexOf(over);
+            Tiles.Children.Remove(dragging);
+            Tiles.Children.Insert(i, dragging);
+        }
+    }
+
+    void OnTileUp(object sender, MouseButtonEventArgs e)
+    {
+        if (Tiles.IsMouseCaptured) Tiles.ReleaseMouseCapture(); // OnTileDrop finishes the drag
+        dragging = null;
+    }
+
+    void OnTileDrop(object sender, MouseEventArgs e)
+    {
+        if (dragging == null) return;
+        dragging.Opacity = 1;
+        Tiles.Cursor = null;
+        dragging = null;
+        Optimiser.Settings.SetText(TileOrderSetting, string.Join("|", Tiles.Children.OfType<StatTile>().Select(t => t.Label)));
+    }
 
     void ShowState()
     {

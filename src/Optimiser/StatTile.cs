@@ -16,8 +16,15 @@ public sealed class StatTile : Border
     readonly Polyline? trend;
     readonly Queue<double> history = new();
 
+    public string Label { get; }
+
+    // Where a tile sits in an order saved as labels joined by "|"; tiles not in it go last, in their usual order.
+    public static int Rank(string label, string? saved) =>
+        Array.IndexOf(saved?.Split('|') ?? [], label) is var i and >= 0 ? i : int.MaxValue;
+
     public StatTile(string label, bool showTrend)
     {
+        Label = label;
         Style = (Style)Application.Current.FindResource("Panel");
         Margin = new Thickness(6, 0, 6, 12);
         unit.Foreground = (Brush)Application.Current.FindResource("Muted");
