@@ -26,7 +26,7 @@ public partial class OverclockPage : UserControl
         if (gpu == null)
         {
             (State.Text, StateDot.Fill) = (why!, Paint("Muted"));
-            Buttons.IsEnabled = Keep.IsEnabled = false;
+            Controls.Visibility = Visibility.Collapsed;
             return;
         }
         GpuName.Text = gpu.Name;
@@ -36,7 +36,7 @@ public partial class OverclockPage : UserControl
         if (Overclock.Crashed is { } c && Result.Visibility != Visibility.Visible)
             ShowResult($"The last test didn't finish at +{c.Core} MHz core and +{c.Memory} MHz memory, most likely because the PC froze. "
                      + "Your GPU started on stock clocks, and the next test stays below that setting.");
-        Buttons.IsEnabled = Keep.IsEnabled = true;
+        Controls.Visibility = Visibility.Visible;
         TuneButton.IsEnabled = true;
         StockButton.IsEnabled = o != (0, 0) || Overclock.Saved != null;
     }

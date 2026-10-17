@@ -25,25 +25,27 @@
           <TextBlock x:Name="Result" Style="{StaticResource MutedText}" FontSize="13" LineHeight="19" MaxWidth="720"
                      HorizontalAlignment="Left" Margin="0,14,0,0" Visibility="Collapsed" />
 
-          <StackPanel x:Name="Buttons" Orientation="Horizontal" Margin="0,18,0,0">
-            <Button x:Name="TuneButton" Style="{StaticResource AccentButton}" Content="Find a safe overclock" Click="OnTune"
-                    ToolTip="Takes up to about 15 minutes. Keep the laptop plugged in and leave games closed." />
-            <Button x:Name="StopButton" Style="{StaticResource SecondaryButton}" Content="Stop" Margin="10,0,0,0" Click="OnStop"
-                    Visibility="Collapsed" />
-            <Button x:Name="StockButton" Style="{StaticResource SecondaryButton}" Content="Back to stock" Margin="10,0,0,0"
-                    Click="OnStock" ToolTip="Put the GPU back on Nvidia's own clocks and forget the overclock" />
-          </StackPanel>
-
-          <Border Height="1" Background="{StaticResource Line}" Margin="0,20,0,16" />
-          <DockPanel>
-            <CheckBox x:Name="Keep" DockPanel.Dock="Right" Style="{StaticResource Switch}" Margin="24,0,0,0" Click="OnKeep"
-                      AutomationProperties.Name="Keep the overclock after a restart" />
-            <StackPanel>
-              <TextBlock Text="Keep after a restart" FontWeight="SemiBold" />
-              <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="0,4,0,0" MaxWidth="720" HorizontalAlignment="Left"
-                         Text="Off, Windows starts on Nvidia's own clocks every time. On, Optimiser puts back the overclock that passed its test. If a test ever freezes the PC, the next start stays on stock clocks." />
+          <StackPanel x:Name="Controls">
+            <StackPanel x:Name="Buttons" Orientation="Horizontal" Margin="0,18,0,0">
+              <Button x:Name="TuneButton" Style="{StaticResource AccentButton}" Content="Find a safe overclock" Click="OnTune"
+                      ToolTip="Takes up to about 15 minutes. Keep the laptop plugged in and leave games closed." />
+              <Button x:Name="StopButton" Style="{StaticResource SecondaryButton}" Content="Stop" Margin="10,0,0,0" Click="OnStop"
+                      Visibility="Collapsed" />
+              <Button x:Name="StockButton" Style="{StaticResource SecondaryButton}" Content="Back to stock" Margin="10,0,0,0"
+                      Click="OnStock" ToolTip="Put the GPU back on Nvidia's own clocks and forget the overclock" />
             </StackPanel>
-          </DockPanel>
+
+            <Border Height="1" Background="{StaticResource Line}" Margin="0,20,0,16" />
+            <DockPanel>
+              <CheckBox x:Name="Keep" DockPanel.Dock="Right" Style="{StaticResource Switch}" Margin="24,0,0,0" Click="OnKeep"
+                        AutomationProperties.Name="Keep the overclock after a restart" />
+              <StackPanel>
+                <TextBlock Text="Keep after a restart" FontWeight="SemiBold" />
+                <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="0,4,0,0" MaxWidth="720" HorizontalAlignment="Left"
+                           Text="Off, Windows starts on Nvidia's own clocks every time. On, Optimiser puts back the overclock that passed its test. If a test ever freezes the PC, the next start stays on stock clocks." />
+              </StackPanel>
+            </DockPanel>
+          </StackPanel>
         </StackPanel>
       </Border>
 

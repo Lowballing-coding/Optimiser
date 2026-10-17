@@ -231,7 +231,7 @@
             <RadioButton Style="{StaticResource Nav}" Content="&#xE9D9;" Tag="Stats" Checked="OnNav" />
             <RadioButton Style="{StaticResource Nav}" Content="&#xE81C;" Tag="Backups" Checked="OnNav" />
             <RadioButton x:Name="RgbNav" Style="{StaticResource Nav}" Content="&#xE790;" Tag="RGB" Checked="OnNav" />
-            <RadioButton x:Name="OverclockNav" Style="{StaticResource Nav}" Content="&#xEC4A;" Tag="Overclock" Checked="OnNav" />
+            <RadioButton x:Name="OverclockNav" Style="{StaticResource Nav}" Content="&#xE950;" Tag="Overclock" Checked="OnNav" />
           </StackPanel>
         </DockPanel>
       </Border>

@@ -30,7 +30,7 @@ public sealed class NvGpu : IDisposable
                     && nvmlDeviceGetMemClkVfOffset(d, out var memory) == 0 && nvmlDeviceSetMemClkVfOffset(d, memory) == 0)
                 {
                     // Laptop GPUs aim to sit at or below 87 °C, so higher means the cooling can't keep up.
-                    var limit = nvmlDeviceGetTemperatureThreshold(d, 1, out var slowdown) == 0 ? Math.Min((int)slowdown - 2, 88) : 88;
+                    var limit = nvmlDeviceGetTemperatureThreshold(d, 1, out var slowdown) == 0 && slowdown > 60 ? Math.Min((int)slowdown - 2, 88) : 88;
                     return new NvGpu(d, System.Text.Encoding.ASCII.GetString(name).TrimEnd('\0'), limit);
                 }
             }
