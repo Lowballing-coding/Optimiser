@@ -1,0 +1,76 @@
+<UserControl x:Class="Optimiser.OverclockPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="0,0,14,28">
+      <TextBlock Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left"
+                 Text="Optimiser raises your GPU's clocks in small steps and tests each one with a check that counts wrong answers, so it finds a fast setting your games can trust before you play on it." />
+
+      <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
+        <StackPanel>
+          <TextBlock x:Name="GpuName" Text="Graphics card" Style="{StaticResource PanelTitle}" />
+          <DockPanel>
+            <Ellipse x:Name="StateDot" Width="10" Height="10" Margin="0,0,12,0" VerticalAlignment="Center" Fill="{StaticResource Muted}" />
+            <TextBlock x:Name="State" VerticalAlignment="Center" TextWrapping="Wrap" Text="Looking at your GPU…" />
+          </DockPanel>
+
+          <StackPanel x:Name="Testing" Visibility="Collapsed" Margin="0,18,0,0">
+            <DockPanel>
+              <TextBlock x:Name="Live" DockPanel.Dock="Right" FontSize="13" Foreground="{StaticResource Muted}" />
+              <TextBlock x:Name="Stage" FontWeight="SemiBold" />
+            </DockPanel>
+            <ProgressBar x:Name="Bar" Style="{StaticResource Bar}" Margin="0,10,0,0" AutomationProperties.Name="Overclock test" />
+          </StackPanel>
+
+          <TextBlock x:Name="Result" Style="{StaticResource MutedText}" FontSize="13" LineHeight="19" MaxWidth="720"
+                     HorizontalAlignment="Left" Margin="0,14,0,0" Visibility="Collapsed" />
+
+          <StackPanel x:Name="Buttons" Orientation="Horizontal" Margin="0,18,0,0">
+            <Button x:Name="TuneButton" Style="{StaticResource AccentButton}" Content="Find a safe overclock" Click="OnTune"
+                    ToolTip="Takes up to about 15 minutes. Keep the laptop plugged in and leave games closed." />
+            <Button x:Name="StopButton" Style="{StaticResource SecondaryButton}" Content="Stop" Margin="10,0,0,0" Click="OnStop"
+                    Visibility="Collapsed" />
+            <Button x:Name="StockButton" Style="{StaticResource SecondaryButton}" Content="Back to stock" Margin="10,0,0,0"
+                    Click="OnStock" ToolTip="Put the GPU back on Nvidia's own clocks and forget the overclock" />
+          </StackPanel>
+
+          <Border Height="1" Background="{StaticResource Line}" Margin="0,20,0,16" />
+          <DockPanel>
+            <CheckBox x:Name="Keep" DockPanel.Dock="Right" Style="{StaticResource Switch}" Margin="24,0,0,0" Click="OnKeep"
+                      AutomationProperties.Name="Keep the overclock after a restart" />
+            <StackPanel>
+              <TextBlock Text="Keep after a restart" FontWeight="SemiBold" />
+              <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="0,4,0,0" MaxWidth="720" HorizontalAlignment="Left"
+                         Text="Off, Windows starts on Nvidia's own clocks every time. On, Optimiser puts back the overclock that passed its test. If a test ever freezes the PC, the next start stays on stock clocks." />
+            </StackPanel>
+          </DockPanel>
+        </StackPanel>
+      </Border>
+
+      <TextBlock Text="How it stays safe" Style="{StaticResource GroupTitle}" />
+      <Border Style="{StaticResource Panel}">
+        <StackPanel>
+          <TextBlock Style="{StaticResource MutedText}" FontSize="13" LineHeight="19" MaxWidth="720" HorizontalAlignment="Left"
+                     Margin="0,0,0,0" Text="It only moves clock speeds through Nvidia's driver. Voltage and power stay at the laptop's own limits, so the GPU can't draw more than it was built for." />
+          <TextBlock Style="{StaticResource MutedText}" FontSize="13" LineHeight="19" MaxWidth="720" HorizontalAlignment="Left"
+                     Margin="0,8,0,0" Text="Steps are small: 30 MHz on the core and 100 MHz on the memory, never past +180 and +800." />
+          <TextBlock Style="{StaticResource MutedText}" FontSize="13" LineHeight="19" MaxWidth="720" HorizontalAlignment="Left"
+                     Margin="0,8,0,0" Text="Each step has to make no wrong answers, keep the driver running and not get slower. The first one that fails ends the search, and Optimiser backs off a step below the last good one for headroom." />
+          <TextBlock Style="{StaticResource MutedText}" FontSize="13" LineHeight="19" MaxWidth="720" HorizontalAlignment="Left"
+                     Margin="0,8,0,0" Text="The test stops and goes back to where you were if the GPU passes 88 °C, if you press Stop, or if you close Optimiser." />
+          <TextBlock Style="{StaticResource MutedText}" FontSize="13" LineHeight="19" MaxWidth="720" HorizontalAlignment="Left"
+                     Margin="0,8,0,0" Text="A freeze can't stick: the driver drops offsets when Windows restarts, and Optimiser never puts back one that didn't finish its test." />
+        </StackPanel>
+      </Border>
+
+      <TextBlock Text="Processor" Style="{StaticResource GroupTitle}" />
+      <Border Style="{StaticResource Panel}">
+        <StackPanel>
+          <TextBlock x:Name="CpuName" FontWeight="SemiBold" />
+          <TextBlock x:Name="CpuNote" Style="{StaticResource MutedText}" FontSize="13" LineHeight="19" MaxWidth="720"
+                     HorizontalAlignment="Left" Margin="0,6,0,0" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

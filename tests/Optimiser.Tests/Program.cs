@@ -222,6 +222,19 @@ Check(AutoStart.InstalledIsAtLeast(fakeGame) && AutoStart.InstalledIsAtLeast(unv
 AutoStart.TurnOff();
 Check(!AutoStart.IsOn() && !Directory.Exists(AutoStart.InstallFolder), "turning it off removes both");
 
+// GPU stress test, on Windows' software renderer since CI has no GPU: it passes on a healthy device, and a
+// deliberately wrong value is caught, so a real error during an overclock can't slip through.
+using (var stress = new GpuStress(software: true))
+{
+    var run = stress.Run(TimeSpan.FromSeconds(2));
+    Console.WriteLine($"GPU test: {run.Verdict}, {run.Score:0.0} passes a second over {stress.MegaBytes} MB");
+    Check(run is { Verdict: Verdict.Passed, Score: > 0 }, "the GPU test passes when nothing is wrong");
+    stress.Inject = true;
+    Check(stress.Run(TimeSpan.FromSeconds(10)).Verdict == Verdict.Errors, "the GPU test catches a wrong answer");
+}
+Check(Overclock.Parse("120,400") == (120, 400) && Overclock.Parse("bad") == null && Overclock.Parse(null) == null, "saved offsets read back");
+Check(NvGpu.Open(out var noGpu) == null && noGpu != null, "no Nvidia GPU explains itself");
+
 // Screens: reading refresh rates works, whatever the runner's screen offers.
 Check(Display.Screens().All(s => s.Hz > 1 && s.Hz <= s.MaxHz), "reads each screen's refresh rate");
 

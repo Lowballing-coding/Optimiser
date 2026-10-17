@@ -137,6 +137,21 @@
       </Setter>
     </Style>
 
+    <!-- Thin orange bar on a dark track -->
+    <Style x:Key="Bar" TargetType="ProgressBar">
+      <Setter Property="Height" Value="6" />
+      <Setter Property="Maximum" Value="100" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ProgressBar">
+            <Border x:Name="PART_Track" Background="{StaticResource Line}" CornerRadius="3">
+              <Border x:Name="PART_Indicator" Background="{StaticResource Accent}" CornerRadius="3" HorizontalAlignment="Left" />
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <!-- Small pill next to a title, e.g. "Needs a restart" -->
     <Style x:Key="Badge" TargetType="Border">
       <Setter Property="Background" Value="{StaticResource Line}" />

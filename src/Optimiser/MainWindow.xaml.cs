@@ -756,6 +756,9 @@ public partial class MainWindow : Window
         RGB.ShowSample();
         RgbNav.IsChecked = true;
         await Save("RGB with apps found");
+        Overclock.ShowSample();
+        OverclockNav.IsChecked = true;
+        await Save("Overclock testing");
         Sidebar.Width = SidebarOpen; // as it looks while hovered
         await Save("Sidebar");
         App.Quit();
