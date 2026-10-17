@@ -10,7 +10,8 @@ namespace Optimiser;
 public enum ProfileMode { Automatic, On, Off }
 
 // Waits for Windows' process start/stop events (no polling) and switches the gaming profile on while any game
-// from the Games list is running, then puts the power mode back when the last one closes.
+// from the Games list with its own switch on is running, then puts the power mode back when the last one closes.
+// It sees every game on the list in every mode, so the FPS recorder can follow games with the profile off too.
 public sealed class GameWatcher : IDisposable
 {
     public const string PowerModeSetting = "GamingPowerMode", PrioritySetting = "GamingPriority",
@@ -22,7 +23,8 @@ public sealed class GameWatcher : IDisposable
     readonly Backup backup;
     readonly ManagementEventWatcher starts = new(new EventQuery("SELECT ProcessID FROM Win32_ProcessStartTrace"));
     readonly ManagementEventWatcher stops = new(new EventQuery("SELECT ProcessID FROM Win32_ProcessStopTrace"));
-    readonly Dictionary<uint, Game> running = [];
+    readonly Dictionary<uint, Game> running = [];  // games getting the gaming profile; empty in Off mode
+    readonly Dictionary<uint, Game> playing = [];  // every game on the list that's running, under the running lock
     readonly object switching = new();
     List<Game> games = [];
     volatile ProfileMode mode;
@@ -37,11 +39,8 @@ public sealed class GameWatcher : IDisposable
         starts.EventArrived += (_, e) => OnStart((uint)e.NewEvent["ProcessID"]);
         stops.EventArrived += (_, e) => OnStop((uint)e.NewEvent["ProcessID"]);
         mode = SavedMode;
-        if (mode != ProfileMode.Off)
-        {
-            starts.Start();
-            stops.Start();
-        }
+        starts.Start();
+        stops.Start();
         lock (running) Sync();
     }
 
@@ -59,24 +58,14 @@ public sealed class GameWatcher : IDisposable
             lock (switching) // the window and the tray menu can both change it
             {
                 if (value == mode) return;
-                if (value == ProfileMode.Off)
-                {
-                    mode = value; // OnStart ignores new games from here
-                    starts.Stop(); // outside the running lock: Stop waits for event handlers, which take it
-                    stops.Stop();
-                }
-                else if (mode == ProfileMode.Off)
-                {
-                    starts.Start(); // first, so a WMI failure changes nothing
-                    stops.Start();
-                }
+                var wasOff = mode == ProfileMode.Off;
                 lock (running)
                 {
                     mode = value;
                     if (value == ProfileMode.Off) running.Clear();
                     Sync();
                 }
-                if (value != ProfileMode.Off) CheckRunning();
+                if (wasOff) CheckRunning(); // games already running get the profile now
             }
             Changed?.Invoke();
         }
@@ -87,7 +76,8 @@ public sealed class GameWatcher : IDisposable
         get { lock (running) return profileOn; }
     }
 
-    // A game taken off the list (say, its gaming profile switch was turned off) stops counting straight away.
+    // Every game found. One taken off the list, or whose own gaming profile switch was turned off, stops getting the
+    // profile straight away; one whose switch was turned on gets it at the next CheckRunning.
     public List<Game> Games
     {
         get { lock (running) return games; }
@@ -96,34 +86,49 @@ public sealed class GameWatcher : IDisposable
             lock (running)
             {
                 games = value;
-                foreach (var pid in running.Where(r => !value.Contains(r.Value)).Select(r => r.Key).ToList()) running.Remove(pid);
+                foreach (var pid in playing.Where(p => !value.Contains(p.Value)).Select(p => p.Key).ToList()) playing.Remove(pid);
+                foreach (var pid in running.Where(r => !playing.ContainsKey(r.Key) || !Optimiser.Games.ProfileOn(r.Value)).Select(r => r.Key).ToList())
+                    running.Remove(pid);
                 Sync();
             }
         }
     }
 
+    // The games getting the gaming profile.
     public List<string> Running
     {
         get { lock (running) return [.. running.Values.Select(g => g.Name).Distinct()]; }
+    }
+
+    // Every game on the list that's running, by process id, profile or not: what the FPS recorder follows.
+    public Dictionary<uint, Game> Playing
+    {
+        get { lock (running) return new(playing); }
     }
 
     // Runs on a WMI thread. The profile switches under the same lock as the count, so a game starting just as
     // another closes can't leave the power mode stuck on Best performance.
     void OnStart(uint pid)
     {
-        if (mode == ProfileMode.Off || ExePath(pid) is not { } exe) return;
+        if (ExePath(pid) is not { } exe) return;
         Game? game = null;
         try
         {
+            bool profile;
             lock (running)
             {
                 game = Optimiser.Games.ForExe(exe, games);
-                if (mode == ProfileMode.Off || game == null || running.ContainsKey(pid)) return; // turned off while it started
-                running[pid] = game;
-                Sync();
+                if (game == null) return;
+                var isNew = playing.TryAdd(pid, game);
+                profile = mode != ProfileMode.Off && Optimiser.Games.ProfileOn(game) && running.TryAdd(pid, game);
+                if (!isNew && !profile) return; // already known
+                if (profile) Sync();
             }
-            Tune(pid);
-            if (Settings.Get(GpuSetting, false)) PreferDedicatedGpu(backup, exe); // ready for next launch
+            if (profile)
+            {
+                Tune(pid);
+                if (Settings.Get(GpuSetting, false)) PreferDedicatedGpu(backup, exe); // ready for next launch
+            }
         }
         catch (Exception e)
         {
@@ -145,8 +150,8 @@ public sealed class GameWatcher : IDisposable
         {
             lock (running)
             {
-                if (!running.Remove(pid)) return;
-                Sync();
+                if (!playing.Remove(pid)) return;
+                if (running.Remove(pid)) Sync();
             }
         }
         catch (Exception e)

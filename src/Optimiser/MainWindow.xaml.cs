@@ -37,6 +37,20 @@ public record GameRow(Game Game, bool Running, bool ProfileOn)
                                           : "Turn on to switch on the gaming profile while this game runs.";
 }
 
+// One line in Recent sessions on the Stats page. Before is the same game's session before it, to compare with.
+public record SessionRow(FpsSession Session, FpsSession? Before)
+{
+    public string When => $"{Session.Start:d MMM HH:mm}";
+    public string Played => Duration(Session.Seconds);
+    public string Average => FrameStats.Show(Session.Average);
+    public string Low1 => FrameStats.Show(Session.Low1);
+    public string Profile => Session.Profile ? "On" : "Off";
+    public string Change => Session.Average is { } a && Before?.Average is double b and > 0 ? $"{a / b - 1:+0%;-0%;0%}" : "";
+    public string Summary => $"{Session.Game}, {When}: {Average} FPS average, {Low1} 1% low";
+
+    public static string Duration(int seconds) => seconds < 3600 ? $"{seconds / 60} min" : $"{seconds / 3600} h {seconds / 60 % 60} min";
+}
+
 public partial class MainWindow : Window
 {
     public const double SidebarOpen = 200; // sidebar width while hovered; 72 when closed
@@ -50,7 +64,12 @@ public partial class MainWindow : Window
     readonly DispatcherTimer statsTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     readonly StatTile gpuTemp = new("GPU temperature", showTrend: true), gpuLoad = new("GPU load", showTrend: true),
         gpuClock = new("GPU clock", false), gpuPower = new("GPU power", false), vram = new("Graphics memory", false),
-        cpuLoad = new("CPU load", showTrend: true), ram = new("Memory", false), power = new("Power", false);
+        cpuLoad = new("CPU load", showTrend: true), ram = new("Memory", false), power = new("Power", false),
+        fps = new("FPS", showTrend: true), gpuLimit = new("GPU held back by", false), cpuSpeed = new("CPU speed", false);
+    double cpuPeakGhz; // ponytail: the meter runs to the highest seen since the page opened; no API gives the turbo ceiling
+    readonly Queue<double> gpuLoads = new(); // the last 5 s, so the bottleneck note doesn't flicker
+    FpsSession? picked; // a past session picked in Recent sessions; null shows the game being played, or the last one
+    int refreshRate;    // the fastest screen's, for the FPS tile's meter
 
     public MainWindow()
     {
@@ -80,11 +99,13 @@ public partial class MainWindow : Window
         DashMode.Content = ModePicker();
         SettingsMode.Content = ModePicker();
         App.GamesChanged += ShowGames;
+        App.GamesChanged += ShowSessions; // a game closing saves its session
         App.UpdateChanged += () => ShowUpdate(App.Update);
         ShowUpdate(null);
         statsTimer.Tick += (_, _) => ShowStats();
         statsTimer.Start();
         ShowChanges();
+        ShowSessions();
     }
 
     async void OnLoaded(object sender, RoutedEventArgs e)
@@ -369,10 +390,13 @@ public partial class MainWindow : Window
             stats = new Stats();
             var gpuTiles = new[] { gpuTemp, gpuLoad, gpuClock, gpuPower, vram };
             var first = stats.Read();
+            if (first.GpuLimits != null) gpuTiles = [.. gpuTiles, gpuLimit];
+            var cpuTiles = stats.HasCpuSpeed ? new[] { cpuLoad, cpuSpeed } : [cpuLoad];
             var order = Optimiser.Settings.GetText(TileOrderSetting);
-            foreach (var tile in (first.GpuTemp == null ? [] : gpuTiles).Append(cpuLoad).Append(ram).Append(power)
+            foreach (var tile in (first.GpuTemp == null ? [] : gpuTiles).Prepend(fps).Concat(cpuTiles).Append(ram).Append(power)
                          .OrderBy(t => StatTile.Rank(t.Label, order)))
                 Tiles.Children.Add(tile);
+            refreshRate = Display.Screens().Select(s => s.Hz).DefaultIfEmpty(0).Max();
             StatsIntro.Text = (first.GpuTemp == null
                 ? "Live readings, updated every second. No Nvidia graphics driver was found, so there are no GPU readings."
                 : "Live readings, updated every second. Reading the RTX GPU keeps it awake, so Optimiser only reads it while this page is open.")
@@ -382,15 +406,106 @@ public partial class MainWindow : Window
         var r = stats.Read();
         if (r.GpuTemp is { } t)
             gpuTemp.Show($"{t:0}", "°C", t / 100, t >= 87 ? "Hot. The GPU slows itself down at around 87 °C." : null, t);
-        if (r.GpuLoad is { } l) gpuLoad.Show($"{l:0}", "%", l / 100, trendValue: l);
+        var live = Fps.Now();
+        if (r.GpuLoad is { } l) gpuLoad.Show($"{l:0}", "%", l / 100, Bottleneck(l, live?.Current), l);
+        if (r.GpuLimits is { } g)
+        {
+            var why = Optimiser.Stats.Limit(g);
+            gpuLimit.Show(why, why == "Power limit" ? "normal at full load" : "", null, why switch
+            {
+                "Heat" => "Too hot, so it's slowing itself down. Raise the back of the laptop and keep the vents clear.",
+                "Power brake" => "The charger or battery can't keep up. Use the original charger, straight into the wall.",
+                "Slowdown" => "Cut to half speed or less by heat or a power spike.",
+                _ => null,
+            });
+        }
+        if (r.CpuPercentOfBase is { } pct && r.CpuBaseMhz is { } baseMhz)
+        {
+            var ghz = pct / 100 * baseMhz / 1000;
+            cpuPeakGhz = Math.Max(cpuPeakGhz, ghz);
+            cpuSpeed.Show($"{ghz:0.0}", $"GHz, base {baseMhz / 1000:0.0}", ghz / cpuPeakGhz,
+                r.CpuLoad >= 50 && pct < 100 ? "Below its base speed while busy, so heat or power is holding it back." : null);
+        }
         if (r.GpuClock is { } c) gpuClock.Show($"{c:0}", r.GpuMaxClock is { } mc ? $"of {mc:0} MHz" : "MHz", c / r.GpuMaxClock);
         if (r.GpuWatts is { } w) gpuPower.Show($"{w:0}", r.GpuWattLimit is { } wl ? $"of {wl:0} W" : "W", w / r.GpuWattLimit);
         if (r.VramUsedGb is { } vu) vram.Show($"{vu:0.0}", $"of {r.VramTotalGb:0} GB", vu / r.VramTotalGb);
         cpuLoad.Show($"{r.CpuLoad:0}", "%", r.CpuLoad / 100, trendValue: r.CpuLoad);
         ram.Show($"{r.RamUsedGb:0.0}", $"of {r.RamTotalGb:0} GB", r.RamUsedGb / r.RamTotalGb);
-        if (!r.HasBattery) power.Show("Mains", "", null);
-        else power.Show(r.OnBattery ? "On battery" : "Plugged in", r.BatteryPercent is { } b ? $"{b}% charged" : "",
-            r.BatteryPercent / 100.0, r.OnBattery ? "The GPU is held back on battery. Plug in for full performance." : null);
+        var mode = r.PowerMode is { } pm ? Optimiser.Stats.PowerModeName(pm) : "";
+        if (!r.HasBattery) power.Show("Mains", mode, null);
+        else power.Show(r.OnBattery ? "On battery" : "Plugged in",
+            string.Join(", ", new[] { r.BatteryPercent is { } b ? $"{b}% charged" : "", mode }.Where(x => x != "")),
+            r.BatteryPercent / 100.0, r.OnBattery ? "The GPU is held back on battery. Plug in for full performance."
+                : r.PowerMode is 0 or 1 ? "Windows is set to save power, which slows games. Pick Best performance." : null);
+        ShowFps(live);
+    }
+
+    // A note on the GPU load tile while a game runs: whether it's capped by the screen, the GPU has power to spare, or
+    // the game isn't on the RTX at all. Thresholds are rules of thumb.
+    string? Bottleneck(double load, double? fps)
+    {
+        gpuLoads.Enqueue(load);
+        if (gpuLoads.Count > 5) gpuLoads.Dequeue();
+        if (App.Watcher?.Playing.Values.FirstOrDefault()?.Name is not { } game || gpuLoads.Count < 5) return null;
+        var average = gpuLoads.Average();
+        return average < 5 && App.Hardware?.HasIntegratedGpu == true
+                ? $"{game} may be running on the built-in graphics. Turn on \"{Tweaks.GpuTweakName}\" and restart the game."
+            : refreshRate > 0 && fps >= refreshRate * 0.97 ? $"Capped at your screen's {refreshRate} Hz, by V-Sync or a frame limit."
+            : average < 80 ? "The GPU has power to spare, so the CPU or a frame cap is what's limiting FPS."
+            : null;
+    }
+
+    // The frame rate panel and the FPS tile. Reads nothing from the GPU: the numbers come from the FPS recorder.
+    void ShowFps((FpsSession Session, double? Current, bool InFront)? live)
+    {
+        fps.Visibility = live == null ? Visibility.Collapsed : Visibility.Visible;
+        if (live is { Current: var now, InFront: var inFront })
+            fps.Show(FrameStats.Show(now), refreshRate > 0 ? $"FPS, screen {refreshRate} Hz" : "FPS", refreshRate > 0 ? now / (double)refreshRate : null,
+                inFront ? null : $"Not counted while {live.Value.Session.Game} isn't the window in front.",
+                refreshRate > 0 ? 100.0 * now / refreshRate : null);
+        FpsLive.Visibility = live != null && picked == null ? Visibility.Visible : Visibility.Collapsed;
+
+        // A game that hasn't been in front for a full second yet has nothing to show, so the last session shows instead.
+        var s = picked ?? (live?.Session is { Seconds: > 0 } playing ? playing : null)
+                ?? (SessionList.ItemsSource as List<SessionRow>)?.FirstOrDefault()?.Session;
+        FpsFigures.Visibility = s == null ? Visibility.Collapsed : Visibility.Visible;
+        FpsTitle.Text = s != null
+            ? $"{s.Game}, " + (s == live?.Session ? $"playing now, {SessionRow.Duration(s.Seconds)} so far" : $"{s.Start:d MMM HH:mm}, played {SessionRow.Duration(s.Seconds)}")
+              + $". Gaming profile {(s.Profile ? "on" : "off")}."
+            : App.WatcherError is { } error ? $"Can't record FPS: Windows wouldn't report games starting ({error})."
+            : Fps.Error is { } fpsError ? $"Can't count frames: {fpsError}"
+            : App.Watcher?.Playing.Values.FirstOrDefault() is { } game
+                ? $"Waiting for frames from {game.Name}. They count while it's the window in front."
+            : "Play a game from your Games list and Optimiser records its frame rate: the average, the high, the 1% and 0.1% lows, and a chart of the whole session."
+              + (AutoStart.IsOn() ? " It records with this window closed too."
+                 : " Turn on \"Run in the background and start with Windows\" on the Optimisations page so it keeps recording after you close the window.");
+        if (s == null) return;
+        FpsAverage.Text = FrameStats.Show(s.Average);
+        FpsHigh.Text = FrameStats.Show(s.High);
+        FpsLow1.Text = FrameStats.Show(s.Low1);
+        FpsLow01.Text = FrameStats.Show(s.Low01);
+        FpsFrame.Text = s.Average is { } a ? $"{1000 / a:0.0} ms" : "–";
+        FpsChart.Show(s);
+    }
+
+    void ShowSessions()
+    {
+        var history = Fps.History();
+        var rows = history.Select((s, i) => new SessionRow(s, history.Skip(i + 1).FirstOrDefault(b => b.Game == s.Game))).ToList();
+        SessionList.ItemsSource = rows;
+        Sessions.Visibility = rows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        picked = null;
+        if (Stats.Visibility == Visibility.Visible) ShowFps(Fps.Now());
+    }
+
+    // Picking a past session shows it in the chart; picking it again goes back to the live or latest one.
+    void OnSession(object sender, RoutedEventArgs e)
+    {
+        var row = (RadioButton)sender;
+        var s = ((SessionRow)row.DataContext).Session;
+        picked = picked == s ? null : s;
+        row.IsChecked = picked != null;
+        ShowFps(Fps.Now());
     }
 
     void ShowGames()
@@ -603,7 +718,7 @@ public partial class MainWindow : Window
     Point dragStart;
     Vector grab; // where on the tile it was picked up
 
-    StatTile? TileAt(Point p) => Tiles.Children.OfType<StatTile>().FirstOrDefault(t => LayoutInformation.GetLayoutSlot(t).Contains(p));
+    StatTile? TileAt(Point p) => Tiles.Children.OfType<StatTile>().FirstOrDefault(t => t.IsVisible && LayoutInformation.GetLayoutSlot(t).Contains(p));
 
     static Point SlotOf(StatTile t) => LayoutInformation.GetLayoutSlot(t).TopLeft;
 
@@ -749,6 +864,17 @@ public partial class MainWindow : Window
         NoGames.Visibility = Visibility.Collapsed;
         (GameStatus.Text, GameHint.Text, GameDot.Fill) = ("Gaming profile on", "Cyberpunk 2077 is running.", Paint("Good"));
         await Save("Games with a list");
+        statsTimer.Stop(); // keeps the made-up session below on screen
+        ((RadioButton)Nav.Children[3]).IsChecked = true;
+        int[] chart = [.. Enumerable.Range(0, 540).Select(i => (int)(128 + 14 * Math.Sin(i / 23.0) - (i % 97 == 40 ? 48 : 0)))];
+        var played = new FpsSession("Cyberpunk 2077", new DateTime(2026, 10, 12, 21, 14, 0), 4320, 127.6, 158, 84.2, 61.5, true, chart, 8);
+        var before = played with { Start = new(2026, 10, 11, 20, 2, 0), Seconds = 2700, Average = 112.3, Low1 = 71.0, Profile = false };
+        SessionList.ItemsSource = new List<SessionRow> { new(played, before), new(before, null) };
+        Sessions.Visibility = Visibility.Visible;
+        ShowFps((played, 141, true));
+        UpdateLayout(); // the chart needs its width before it can draw the hover
+        FpsChart.Hover(0.62);
+        await Save("Stats with a game");
         ((RadioButton)Nav.Children[1]).IsChecked = true;
         var sample = SetCandidates.ToList();
         SetList.ItemsSource = new[] { new SetRow("Gaming", sample), new SetRow("Everyday", [.. sample.Take(2)]) };
