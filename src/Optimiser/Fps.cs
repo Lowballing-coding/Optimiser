@@ -16,7 +16,8 @@ public record FpsSession(string Game, DateTime Start, int Seconds, double? Avera
 // its session is summed up and kept with the last 20.
 public static class Fps
 {
-    public const string SessionName = "Optimiser FPS"; // Windows keeps a session running until it's stopped by name
+    // Windows keeps a session running until it's stopped by name, and names are machine-wide: one per signed-in user.
+    public static readonly string SessionName = "Optimiser FPS " + Process.GetCurrentProcess().SessionId;
     const string Setting = "FpsSessions";
     public const int Keep = 20, MinSeconds = 10;
     const ulong RuntimeKeywords = 0x8000000000000002; // DXGI's and D3D9's "Events" keyword plus their analytic channel
@@ -35,6 +36,7 @@ public static class Fps
         public double? Live; // FPS over the last second, in front or not; null before the first frames
         public long LiveAt, Frames, ProfileFrames;
         public bool InFront;
+        public int FrontTicks; // ticks in a row it's been in front
     }
 
     // About once a second, from App: hands each game's new frames to its stats, from whichever of its processes drew the
@@ -44,6 +46,8 @@ public static class Fps
     public static void Tick(uint foreground)
     {
         lock (plays)
+        {
+            if (plays.Count > 0 && etw?.Finished.IsCompleted == true) Start(); // stopped from outside
             foreach (var p in plays.Values)
             {
                 var ms = p.Pids.Select(Counter.Drain).MaxBy(m => m.Count) ?? [];
@@ -51,11 +55,15 @@ public static class Fps
                 if (ms.Count > 0) (p.Live, p.LiveAt) = (1000 / ms.Average(), now);
                 else if (p.Live != null && now - p.LiveAt > Stopwatch.Frequency * 5 / 2) p.Live = 0; // frames arrive about once a second, so one tick can miss them
                 p.InFront = p.Pids.Contains(foreground);
-                if (!p.InFront) continue;
+                p.FrontTicks = p.InFront ? p.FrontTicks + 1 : 0;
+                // ponytail: frames arrive up to 2 s late, so they only count once the game has been in front for the 2 s
+                // before this tick too; that loses ~2 s per alt-tab. Per-frame times against foreground changes if it matters.
+                if (p.FrontTicks < 3) continue;
                 foreach (var m in ms) p.Stats.Add(m);
                 p.Frames += ms.Count;
                 if (profileOn) p.ProfileFrames += ms.Count;
             }
+        }
     }
 
     // The games on the list that are running now, from GameWatcher, on the UI thread. Counts frames while any runs.

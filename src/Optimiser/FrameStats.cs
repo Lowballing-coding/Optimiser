@@ -66,7 +66,7 @@ public sealed class FrameStats
         lock (gate)
         {
             var started = high >= 0; // nothing shows until the first full second
-            return new(started ? frames * 1000 / elapsed : null,
+            return new(started ? frames * 1000.0 / elapsed : null,
                        started ? high : null,
                        frames >= 100 ? Low(frames / 100) : null,
                        frames >= 1000 ? Low(frames / 1000) : null,

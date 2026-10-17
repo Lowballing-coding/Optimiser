@@ -52,7 +52,7 @@ public sealed class FpsChart : Canvas
         if (session is not { Chart.Length: > 1 } s || ActualWidth <= Left) { line.Points = []; return; }
 
         var max = Math.Max(s.Chart.Max(), 60);
-        var gap = max <= 120 ? 30 : max <= 240 ? 60 : 120;
+        var gap = new[] { 30, 60, 120, 250, 500, 1000, 2500, 5000 }.FirstOrDefault(g => max * 1.1 / g <= 5, 10_000); // at most 6 lines
         top = Math.Ceiling(max * 1.1 / gap) * gap;
         for (var fps = 0.0; fps <= top; fps += gap)
         {
@@ -83,10 +83,10 @@ public sealed class FpsChart : Canvas
         SetLeft(dot, x - dot.Width / 2);
         SetTop(dot, y - dot.Height / 2);
         tipText.Text = $"{Time(i * s.Step)}, {s.Chart[i]} FPS";
+        cross.Visibility = dot.Visibility = tip.Visibility = Visibility.Visible; // a collapsed tip measures as 0 x 0
         tip.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         SetLeft(tip, x + 12 + tip.DesiredSize.Width < ActualWidth ? x + 12 : x - 12 - tip.DesiredSize.Width); // stays inside
         SetTop(tip, Math.Clamp(y - tip.DesiredSize.Height - 8, 0, Height - Bottom - tip.DesiredSize.Height));
-        cross.Visibility = dot.Visibility = tip.Visibility = Visibility.Visible;
     }
 
     void Hide()

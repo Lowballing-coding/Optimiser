@@ -48,7 +48,8 @@ public record SessionRow(FpsSession Session, FpsSession? Before)
     public string Change => Session.Average is { } a && Before?.Average is double b and > 0 ? $"{a / b - 1:+0%;-0%;0%}" : "";
     public string Summary => $"{Session.Game}, {When}: {Average} FPS average, {Low1} 1% low";
 
-    public static string Duration(int seconds) => seconds < 3600 ? $"{seconds / 60} min" : $"{seconds / 3600} h {seconds / 60 % 60} min";
+    public static string Duration(int seconds) =>
+        seconds < 60 ? $"{seconds} s" : seconds < 3600 ? $"{seconds / 60} min" : $"{seconds / 3600} h {seconds / 60 % 60} min";
 }
 
 public partial class MainWindow : Window
@@ -407,7 +408,7 @@ public partial class MainWindow : Window
         if (r.GpuTemp is { } t)
             gpuTemp.Show($"{t:0}", "°C", t / 100, t >= 87 ? "Hot. The GPU slows itself down at around 87 °C." : null, t);
         var live = Fps.Now();
-        if (r.GpuLoad is { } l) gpuLoad.Show($"{l:0}", "%", l / 100, Bottleneck(l, live?.Current), l);
+        if (r.GpuLoad is { } l) gpuLoad.Show($"{l:0}", "%", l / 100, Bottleneck(l, live), l);
         if (r.GpuLimits is { } g)
         {
             var why = Optimiser.Stats.Limit(g);
@@ -423,7 +424,7 @@ public partial class MainWindow : Window
         {
             var ghz = pct / 100 * baseMhz / 1000;
             cpuPeakGhz = Math.Max(cpuPeakGhz, ghz);
-            cpuSpeed.Show($"{ghz:0.0}", $"GHz, base {baseMhz / 1000:0.0}", ghz / cpuPeakGhz,
+            cpuSpeed.Show($"{ghz:0.0}", $"GHz, base {baseMhz / 1000:0.0}", cpuPeakGhz > 0 ? ghz / cpuPeakGhz : null,
                 r.CpuLoad >= 50 && pct < 100 ? "Below its base speed while busy, so heat or power is holding it back." : null);
         }
         if (r.GpuClock is { } c) gpuClock.Show($"{c:0}", r.GpuMaxClock is { } mc ? $"of {mc:0} MHz" : "MHz", c / r.GpuMaxClock);
@@ -440,17 +441,23 @@ public partial class MainWindow : Window
         ShowFps(live);
     }
 
-    // A note on the GPU load tile while a game runs: whether it's capped by the screen, the GPU has power to spare, or
-    // the game isn't on the RTX at all. Thresholds are rules of thumb.
-    string? Bottleneck(double load, double? fps)
+    // A note on the GPU load tile while a game is in front: whether it's capped by the screen, the GPU has power to
+    // spare, or the game isn't on the RTX at all. In the background many games stop drawing, so nothing is said then.
+    // Thresholds are rules of thumb.
+    string? Bottleneck(double load, (FpsSession Session, double? Current, bool InFront)? live)
     {
+        if (live is not { InFront: true, Session.Game: var game, Current: var fps })
+        {
+            gpuLoads.Clear();
+            return null;
+        }
         gpuLoads.Enqueue(load);
         if (gpuLoads.Count > 5) gpuLoads.Dequeue();
-        if (App.Watcher?.Playing.Values.FirstOrDefault()?.Name is not { } game || gpuLoads.Count < 5) return null;
+        if (gpuLoads.Count < 5) return null;
         var average = gpuLoads.Average();
         return average < 5 && App.Hardware?.HasIntegratedGpu == true
                 ? $"{game} may be running on the built-in graphics. Turn on \"{Tweaks.GpuTweakName}\" and restart the game."
-            : refreshRate > 0 && fps >= refreshRate * 0.97 ? $"Capped at your screen's {refreshRate} Hz, by V-Sync or a frame limit."
+            : fps is { } f && refreshRate > 0 && Math.Abs(f / refreshRate - 1) <= 0.03 ? $"Capped at your screen's {refreshRate} Hz, by V-Sync or a frame limit."
             : average < 80 ? "The GPU has power to spare, so the CPU or a frame cap is what's limiting FPS."
             : null;
     }
@@ -463,20 +470,19 @@ public partial class MainWindow : Window
             fps.Show(FrameStats.Show(now), refreshRate > 0 ? $"FPS, screen {refreshRate} Hz" : "FPS", refreshRate > 0 ? now / (double)refreshRate : null,
                 inFront ? null : $"Not counted while {live.Value.Session.Game} isn't the window in front.",
                 refreshRate > 0 ? 100.0 * now / refreshRate : null);
-        FpsLive.Visibility = live != null && picked == null ? Visibility.Visible : Visibility.Collapsed;
 
-        // A game that hasn't been in front for a full second yet has nothing to show, so the last session shows instead.
-        var s = picked ?? (live?.Session is { Seconds: > 0 } playing ? playing : null)
-                ?? (SessionList.ItemsSource as List<SessionRow>)?.FirstOrDefault()?.Session;
+        // A problem, or a game with nothing counted yet, comes before the last session; a picked session before both.
+        var note = App.WatcherError is { } error ? $"Can't record FPS: Windows wouldn't report games starting ({error})."
+            : Fps.Error is { } fpsError ? $"Can't count frames: {fpsError}"
+            : live is { Session: { Seconds: 0 } waiting } ? $"Waiting for frames from {waiting.Game}. They count while it's the window in front."
+            : null;
+        var s = picked ?? (note != null ? null : live?.Session ?? (SessionList.ItemsSource as List<SessionRow>)?.FirstOrDefault()?.Session);
+        FpsLive.Visibility = s != null && s == live?.Session ? Visibility.Visible : Visibility.Collapsed;
         FpsFigures.Visibility = s == null ? Visibility.Collapsed : Visibility.Visible;
         FpsTitle.Text = s != null
             ? $"{s.Game}, " + (s == live?.Session ? $"playing now, {SessionRow.Duration(s.Seconds)} so far" : $"{s.Start:d MMM HH:mm}, played {SessionRow.Duration(s.Seconds)}")
               + $". Gaming profile {(s.Profile ? "on" : "off")}."
-            : App.WatcherError is { } error ? $"Can't record FPS: Windows wouldn't report games starting ({error})."
-            : Fps.Error is { } fpsError ? $"Can't count frames: {fpsError}"
-            : App.Watcher?.Playing.Values.FirstOrDefault() is { } game
-                ? $"Waiting for frames from {game.Name}. They count while it's the window in front."
-            : "Play a game from your Games list and Optimiser records its frame rate: the average, the high, the 1% and 0.1% lows, and a chart of the whole session."
+            : note ?? "Play a game from your Games list and Optimiser records its frame rate: the average, the high, the 1% and 0.1% lows, and a chart of the whole session."
               + (AutoStart.IsOn() ? " It records with this window closed too."
                  : " Turn on \"Run in the background and start with Windows\" on the Optimisations page so it keeps recording after you close the window.");
         if (s == null) return;

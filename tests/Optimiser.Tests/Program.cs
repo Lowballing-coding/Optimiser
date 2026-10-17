@@ -178,9 +178,8 @@ using (var watcher = new GameWatcher(backup) { Games = [new Game("Fake Game", ga
     Check(!watcher.ProfileOn && Settings.GetText(GameWatcher.SavedPowerMode) == null, "Off switches it off and puts the power mode back");
     watcher.Games = [new Game("Fake Game", gameDir, Games.AddedByYou)];
     using var ignored = Process.Start(new ProcessStartInfo(fakeGame, "/c ping -n 30 127.0.0.1") { CreateNoWindow = true, UseShellExecute = false })!;
-    Thread.Sleep(3000);
-    Check(watcher.Running.Count == 0 && !watcher.ProfileOn, "Off ignores games");
-    Check(watcher.Playing.Values.Any(g => g.Name == "Fake Game"), "but still sees them, so their FPS is recorded");
+    Check(SpinWait.SpinUntil(() => watcher.Playing.Values.Any(g => g.Name == "Fake Game"), 15000), "Off still sees games, so their FPS is recorded");
+    Check(watcher.Running.Count == 0 && !watcher.ProfileOn, "but ignores them");
     watcher.Mode = ProfileMode.Automatic;
     Check(watcher.Running.SequenceEqual(["Fake Game"]) && watcher.ProfileOn, "back to Automatic picks up a game that's already running");
     ignored.Kill(entireProcessTree: true);
@@ -449,6 +448,9 @@ Check(redragon is [{ Name: "OemDrv", Lighting: null, Open: @"shell:AppsFolder\{7
     Check(Near(s.Average, times.Length * 1000 / times.Sum(), 1e-6) && Near(s.OnePercentLow, Exact(2000), Exact(2000) * 0.001)
           && Near(s.PointOnePercentLow, Exact(200), Exact(200) * 0.001), "random frames: the lows are within 0.1% of sorting every frame");
 
+    s = Feed((2_200_000, 2.5)).Summary();
+    Check(Near(s.Average, 400, 1e-6) && s.Seconds == 5500, "a 90 minute session at 400 FPS still averages 400");
+
     var shared = new FrameStats();
     var writer = Task.Run(() => { for (var i = 0; i < 300_000; i++) shared.Add(3.3); });
     while (!writer.IsCompleted) _ = shared.Summary();
@@ -488,13 +490,16 @@ Fps.Tick(7);
 Check(Fps.Now() is { Session.Game: "Fps Game", Current: > 99.9 and < 100.1, InFront: true }, "the game being played shows live");
 Check(Fps.Update(new() { [7] = fpsGame }, true).Count == 0, "the launcher closing doesn't end the session");
 var played = Fps.Update([], false);
-Check(played is [{ Game: "Fps Game", Profile: true, Seconds: 32, High: 100, Low1: 20, Low01: 20, Step: 1, Chart.Length: 32 }]
-      && Math.Abs(played[0].Average!.Value - 3080 / 32.0) < 1e-9,
-      "one session per game, from the process that drew most, without the alt-tabbed seconds or the loading screen");
+Check(played is [{ Game: "Fps Game", Profile: true, Seconds: 28, High: 100, Low1: 20, Low01: 20, Step: 1, Chart.Length: 28 }]
+      && Math.Abs(played[0].Average!.Value - 2696 / 28.0) < 1e-9,
+      "one session per game, from the process that drew most, without the loading screen, the alt-tabbed seconds or the 2 s after each switch to the game");
 Check(Etw.Stop(Fps.SessionName) == 4201, "frame counting stops when no game runs");
 Fps.Update(new() { [15] = fpsGame }, false);
-Frames(15, 500, 10);
-Fps.Tick(15);
+for (var i = 0; i < 3; i++)
+{
+    Frames(15, 300, 10);
+    Fps.Tick(15);
+}
 Check(Fps.Update([], false).Count == 0 && Fps.Now() == null, "a session under 10 seconds isn't kept");
 
 for (var i = 0; i < 25; i++) Fps.Save(played[0] with { Seconds = 100 + i });

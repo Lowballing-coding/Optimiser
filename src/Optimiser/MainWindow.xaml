@@ -97,7 +97,7 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="RadioButton">
-            <Border x:Name="Box" Background="Transparent" CornerRadius="6" Padding="10,8">
+            <Border x:Name="Box" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="6" Padding="10,8">
               <ContentPresenter />
             </Border>
             <ControlTemplate.Triggers>
@@ -109,6 +109,7 @@
               </Trigger>
               <Trigger Property="IsChecked" Value="True">
                 <Setter TargetName="Box" Property="Background" Value="{StaticResource Line}" />
+                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
