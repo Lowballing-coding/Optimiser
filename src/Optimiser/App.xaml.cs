@@ -123,6 +123,7 @@ public partial class App : Application
         if (!e.Args.Contains("--snapshot"))
         {
             Rgb.Start(); // puts back the colour picked on the RGB page
+            Overclock.Start();
             var twiceADay = new DispatcherTimer { Interval = TimeSpan.FromHours(12) };
             twiceADay.Tick += (_, _) => AutoCheck();
             twiceADay.Start();
@@ -247,6 +248,7 @@ public partial class App : Application
     {
         tray?.Dispose();
         try { Watcher?.Dispose(); } catch { } // puts the power mode back
+        Overclock.Shutdown();
         base.OnExit(e);
     }
 }
