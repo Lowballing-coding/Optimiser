@@ -7,7 +7,6 @@ namespace Optimiser;
 public record Game(string Name, string Folder, string Source)
 {
     public string Detail => $"{Source}: {Folder}";
-    public bool CanRemove => Source == Games.AddedByYou;
 }
 
 // Finds installed games: Steam and Epic libraries, plus folders added by hand. A process counts as a game
@@ -15,14 +14,14 @@ public record Game(string Name, string Folder, string Source)
 public static partial class Games
 {
     public const string AddedByYou = "Added by you";
-    const string FoldersSetting = "GameFolders", ProfileOffSetting = "GamesWithoutProfile";
+    const string FoldersSetting = "GameFolders", HiddenSetting = "HiddenGames", ProfileOffSetting = "GamesWithoutProfile";
 
     public static List<Game> Find()
     {
         var steam = Reg.Read(@"HKEY_CURRENT_USER\Software\Valve\Steam", "SteamPath") as string;
         var epic = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             @"Epic\EpicGamesLauncher\Data\Manifests");
-        return [.. Steam(steam).Concat(Epic(epic)).Concat(Added())
+        return [.. Visible(Steam(steam).Concat(Epic(epic)).Concat(Added()))
             .Where(g => Directory.Exists(g.Folder))
             .DistinctBy(g => Path.GetFullPath(g.Folder).TrimEnd('\\').ToLowerInvariant())
             .OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)];
@@ -102,7 +101,23 @@ public static partial class Games
             || system.Any(s => s.Equals(full, StringComparison.OrdinalIgnoreCase) || s.StartsWith(full + "\\", StringComparison.OrdinalIgnoreCase)))
             return "That folder has more than games in it. Choose the folder one game is installed in.";
         Settings.SetList(FoldersSetting, [.. Settings.GetList(FoldersSetting).Append(full).Distinct(StringComparer.OrdinalIgnoreCase)]);
+        Settings.SetList(HiddenSetting, [.. Settings.GetList(HiddenSetting).Where(f => !f.Equals(full, StringComparison.OrdinalIgnoreCase))]);
         return null;
+    }
+
+    // Takes a game off the list. A folder you added is forgotten; one found in Steam or Epic stays off the list until
+    // you add its folder back.
+    public static void Remove(Game game)
+    {
+        Settings.SetList(FoldersSetting, [.. Settings.GetList(FoldersSetting).Where(f => !f.Equals(game.Folder, StringComparison.OrdinalIgnoreCase))]);
+        if (game.Source != AddedByYou)
+            Settings.SetList(HiddenSetting, [.. Settings.GetList(HiddenSetting).Append(game.Folder).Distinct(StringComparer.OrdinalIgnoreCase)]);
+    }
+
+    public static IEnumerable<Game> Visible(IEnumerable<Game> games)
+    {
+        var hidden = Settings.GetList(HiddenSetting);
+        return games.Where(g => g.Source == AddedByYou || !hidden.Contains(g.Folder, StringComparer.OrdinalIgnoreCase));
     }
 
     // Each game's own gaming profile switch on the Games page. On unless you turned it off.
@@ -113,9 +128,6 @@ public static partial class Games
         var off = Settings.GetList(ProfileOffSetting).Where(f => !f.Equals(game.Folder, StringComparison.OrdinalIgnoreCase));
         Settings.SetList(ProfileOffSetting, [.. on ? off : off.Append(game.Folder)]);
     }
-
-    public static void Remove(string folder) =>
-        Settings.SetList(FoldersSetting, [.. Settings.GetList(FoldersSetting).Where(f => !f.Equals(folder, StringComparison.OrdinalIgnoreCase))]);
 
     // The game an exe belongs to, if any. Launchers, crash reporters, installers and anti-cheat don't count.
     public static Game? ForExe(string exe, IEnumerable<Game> games) =>
@@ -135,7 +147,8 @@ public static partial class Games
         Regex.Matches(vdf, $"\"{key}\"\\s+\"((?:[^\"\\\\]|\\\\.)*)\"", RegexOptions.IgnoreCase)
             .Select(m => m.Groups[1].Value.Replace(@"\\", @"\").Replace("\\\"", "\""));
 
-    [GeneratedRegex(@"Steamworks|Redistributable|Steam Linux Runtime|^Proton", RegexOptions.IgnoreCase)]
+    // Steam's own tools, and Steam apps that run all day but aren't games.
+    [GeneratedRegex(@"Steamworks|Redistributable|Steam Linux Runtime|^Proton|^Wallpaper Engine$", RegexOptions.IgnoreCase)]
     private static partial Regex SteamTool();
 
     [GeneratedRegex(@"crash|report|unins|setup|redist|prereq|anticheat|battleye|^eac|^be_|helper|launcher|dotnet|dxweb|^steam",
