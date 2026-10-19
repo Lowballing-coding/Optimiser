@@ -62,14 +62,15 @@ public class Backup(string stateKey = Backup.DefaultKey, bool makeRestorePoint =
         k.SetValue(name, value, kind);
     }
 
-    public void Undo(string tweak)
+    // only: undo just some of the tweak's settings, such as one game's.
+    public void Undo(string tweak, Func<Change, bool>? only = null)
     {
-        lock (Changes) UndoLocked(tweak);
+        lock (Changes) UndoLocked(tweak, only);
     }
 
-    void UndoLocked(string tweak)
+    void UndoLocked(string tweak, Func<Change, bool>? only = null)
     {
-        foreach (var c in Changes.Where(c => c.Tweak == tweak).Reverse().ToList())
+        foreach (var c in Changes.Where(c => c.Tweak == tweak && (only == null || only(c))).Reverse().ToList())
         {
             using (var k = Reg.Open(c.Key, write: true)!)
             {
