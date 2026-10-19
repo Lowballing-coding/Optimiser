@@ -106,10 +106,15 @@ File.WriteAllText(Path.Combine(steam, "steamapps", "libraryfolders.vdf"), $$"""
     """);
 Manifest(steam, 1145360, "Hades", "Hades");
 Manifest(steam, 228980, "Steamworks Common Redistributables", "Steamworks Shared");
+Manifest(steam, 431960, "Wallpaper Engine", "wallpaper_engine");
 Manifest(library2, 1091500, "Cyberpunk 2077", "Cyberpunk 2077");
 var steamGames = Games.Steam(steam.Replace('\\', '/')).ToList(); // Steam stores its own path with forward slashes
 Check(steamGames.Select(g => g.Name).Order().SequenceEqual(["Cyberpunk 2077", "Hades"]) && steamGames.All(g => Directory.Exists(g.Folder)),
-      "Steam games found in every library, Steam's own tools skipped");
+      "Steam games found in every library, Steam's own tools and Wallpaper Engine skipped");
+Games.Remove(steamGames[0]);
+Check(Games.Visible(steamGames).SequenceEqual([steamGames[1]]), "a game Steam found can be taken off the list");
+Check(Games.Add(steamGames[0].Folder) == null && Games.Visible(steamGames).Count() == 2, "and comes back when its folder is added");
+Games.Remove(Games.Added().Single());
 
 var epic = Path.Combine(temp, "Epic");
 Directory.CreateDirectory(epic);
@@ -132,8 +137,8 @@ Check(Games.Add(@"C:\") != null && Games.Add(Environment.GetFolderPath(Environme
       "drives and system folders can't be added as games");
 var gameDir = Path.Combine(temp, "Fake Game");
 Directory.CreateDirectory(gameDir);
-Check(Games.Add(gameDir + @"\") == null && Games.Added().Single() is { Name: "Fake Game", CanRemove: true }, "a game folder can be added");
-Games.Remove(gameDir);
+Check(Games.Add(gameDir + @"\") == null && Games.Added().Single() is { Name: "Fake Game" }, "a game folder can be added");
+Games.Remove(Games.Added().Single());
 Check(!Games.Added().Any(), "and removed");
 
 // The watcher spots a game starting and stopping. A copy of cmd.exe stands in for the game.
@@ -222,6 +227,11 @@ const string gpuKey = @"Software\Microsoft\DirectX\UserGpuPreferences";
 using (var k = Registry.CurrentUser.CreateSubKey(gpuKey)) k.SetValue(fakeGame, "SwapEffectUpgradeEnable=1;GpuPreference=1;");
 GameWatcher.PreferDedicatedGpu(backup, fakeGame);
 Check(Registry.GetValue(GameWatcher.GpuPreferences, fakeGame, null) is "SwapEffectUpgradeEnable=1;GpuPreference=2;", "game set to the dedicated GPU");
+GameWatcher.ForgetDedicatedGpu(backup, [new Game("Fake Game", gameDir, Games.AddedByYou)]);
+Check(Registry.GetValue(GameWatcher.GpuPreferences, fakeGame, null) is "SwapEffectUpgradeEnable=1;GpuPreference=2;", "and keeps it while it's on the games list");
+GameWatcher.ForgetDedicatedGpu(backup, []);
+Check(Registry.GetValue(GameWatcher.GpuPreferences, fakeGame, null) is "SwapEffectUpgradeEnable=1;GpuPreference=1;", "a program taken off the list gets its GPU setting back");
+GameWatcher.PreferDedicatedGpu(backup, fakeGame);
 backup.Undo(Tweaks.GpuTweakName);
 Check(Registry.GetValue(GameWatcher.GpuPreferences, fakeGame, null) is "SwapEffectUpgradeEnable=1;GpuPreference=1;", "undo puts the GPU setting back");
 using (var k = Registry.CurrentUser.OpenSubKey(gpuKey, writable: true)!) k.DeleteValue(fakeGame);

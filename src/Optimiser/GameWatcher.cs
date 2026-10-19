@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -216,6 +217,12 @@ public sealed class GameWatcher : IDisposable
         if (current.Contains("GpuPreference=2;")) return;
         backup.Set(Tweaks.GpuTweakName, GpuPreferences, exe, Tweaks.WithFlag(current, "GpuPreference", 2), RegistryValueKind.String);
     }
+
+    // Puts Windows' own graphics setting back for programs that are no longer on the games list, such as one you
+    // removed. One whose .exe is missing, for example on a drive that isn't plugged in, keeps it for when it's back.
+    // ponytail: a scan that misses a Steam library undoes its games too; each gets it back the next time it's played.
+    public static void ForgetDedicatedGpu(Backup backup, IEnumerable<Game> games) =>
+        backup.Undo(Tweaks.GpuTweakName, c => File.Exists(c.Name) && Optimiser.Games.ForExe(c.Name, games) == null);
 
     static string? ExePath(uint pid)
     {

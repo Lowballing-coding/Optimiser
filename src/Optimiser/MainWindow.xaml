@@ -443,7 +443,7 @@
                         <TextBlock Text="Running" Foreground="{StaticResource Good}" />
                       </Border>
                       <Button Style="{StaticResource SecondaryButton}" Padding="14,6" Margin="10,0,0,0" Content="Remove"
-                              Click="OnRemoveGame" Visibility="{Binding Game.CanRemove, Converter={StaticResource Vis}}" />
+                              Click="OnRemoveGame" ToolTip="Take this off the list if it isn't a game" />
                       <CheckBox Style="{StaticResource Switch}" Margin="16,0,0,0" IsChecked="{Binding ProfileOn, Mode=OneWay}"
                                 Click="OnGameProfile" ToolTip="{Binding ProfileTip}"
                                 AutomationProperties.Name="{Binding ProfileTip}" />
