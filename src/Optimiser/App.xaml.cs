@@ -86,6 +86,7 @@ public partial class App : Application
         Updates.CleanUp();
 
         try { GameWatcher.RestorePowerMode(); } catch { } // left on Best performance if Optimiser was closed mid-game
+        try { Etw.Stop(Fps.SessionName); } catch { } // and the frame counter, which Windows keeps running until it's stopped
         try
         {
             Watcher = new GameWatcher(Backup);
@@ -124,6 +125,9 @@ public partial class App : Application
         {
             Rgb.Start(); // puts back the colour picked on the RGB page
             Overclock.Start();
+            var everySecond = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            everySecond.Tick += (_, _) => Fps.Tick(); // the frames of a game being played
+            everySecond.Start();
             var twiceADay = new DispatcherTimer { Interval = TimeSpan.FromHours(12) };
             twiceADay.Tick += (_, _) => AutoCheck();
             twiceADay.Start();
@@ -149,7 +153,7 @@ public partial class App : Application
                 var games = Games.Find();
                 if (Watcher != null)
                 {
-                    Watcher.Games = [.. games.Where(Games.ProfileOn)];
+                    Watcher.Games = games; // the watcher checks each game's own profile switch
                     Watcher.CheckRunning();
                 }
                 return games;
@@ -181,7 +185,18 @@ public partial class App : Application
         var text = running.Count > 0 ? $"Optimiser: gaming profile on for {string.Join(", ", running)}"
                  : Watcher?.ProfileOn == true ? "Optimiser: gaming profile on" : "Optimiser";
         if (tray != null) tray.Text = text.Length > 127 ? text[..124] + "..." : text; // Windows' limit
+        RecordFps();
         GamesChanged?.Invoke();
+    }
+
+    // Counts frames while any game on the list runs, profile or not, and keeps the session of one that closed.
+    static void RecordFps()
+    {
+        try
+        {
+            foreach (var session in Fps.Update(Watcher?.Playing ?? [], Watcher?.ProfileOn == true)) Fps.Save(session);
+        }
+        catch { } // a full registry: the session isn't kept
     }
 
     // Watcher first, so a WMI failure doesn't save a mode that isn't working. Runs off the UI thread: turning
@@ -247,7 +262,8 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         tray?.Dispose();
-        try { Watcher?.Dispose(); } catch { } // puts the power mode back
+        try { Watcher?.Dispose(); } catch { } // puts the power mode back; first, as it matters most
+        try { foreach (var session in Fps.Update([], false)) Fps.Save(session); } catch { } // a game still running: keep its session
         Overclock.Shutdown();
         base.OnExit(e);
     }

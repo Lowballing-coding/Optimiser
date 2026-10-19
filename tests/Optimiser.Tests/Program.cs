@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using Microsoft.Win32;
 using Optimiser;
+using Optimiser.Tests;
 
 const string sub = @"Software\OptimiserSelfTest";
 const string key = @"HKEY_CURRENT_USER\" + sub;
@@ -78,7 +79,12 @@ using (var stats = new Stats())
     var reading = stats.Read();
     Console.WriteLine(reading);
     Check(reading.RamTotalGb > 0 && reading.RamUsedGb > 0 && reading.CpuLoad is >= 0 and <= 100, "live readings");
+    Check(stats.HasCpuSpeed && reading.CpuPercentOfBase > 0 && reading.CpuBaseMhz > 0, "CPU speed from Windows' own counter");
 }
+Check(Stats.Limit(0x40) == "Heat" && Stats.Limit(0x80 | 0x4) == "Power brake" && Stats.Limit(0x4 | 0x1) == "Power limit"
+      && Stats.Limit(0x1) == "Idle" && Stats.Limit(0) == "Nothing", "what's holding the GPU back, in words, worst first");
+Check(Stats.PowerModeName(4) == "Best performance" && Stats.PowerModeName(5) == "Game Mode" && Stats.PowerModeName(9) == "",
+      "Windows' power modes by the names Settings uses");
 
 var hw = Hardware.Detect();
 Console.WriteLine(hw);
@@ -153,14 +159,27 @@ using (var watcher = new GameWatcher(backup) { Games = [new Game("Fake Game", ga
     again.Kill(entireProcessTree: true);
     again.WaitForExit();
 
+    var fake = new Game("Fake Game", gameDir, Games.AddedByYou);
+    Games.SetProfile(fake, false);
+    watcher.Games = [fake];
+    using (var unprofiled = Process.Start(new ProcessStartInfo(fakeGame, "/c ping -n 30 127.0.0.1") { CreateNoWindow = true, UseShellExecute = false })!)
+    {
+        Check(changed.WaitOne(15000) && watcher.Playing.ContainsValue(fake) && watcher.Running.Count == 0 && !watcher.ProfileOn,
+              "a game with its own switch off is still seen, for its FPS, but gets no profile");
+        unprofiled.Kill(entireProcessTree: true);
+        unprofiled.WaitForExit();
+    }
+    Check(changed.WaitOne(15000) && watcher.Playing.Count == 0, "and stops being seen when it closes");
+    Games.SetProfile(fake, true);
+
     watcher.Mode = ProfileMode.On;
     Check(watcher.ProfileOn, "On switches the profile on with no game running");
     watcher.Mode = ProfileMode.Off;
     Check(!watcher.ProfileOn && Settings.GetText(GameWatcher.SavedPowerMode) == null, "Off switches it off and puts the power mode back");
     watcher.Games = [new Game("Fake Game", gameDir, Games.AddedByYou)];
     using var ignored = Process.Start(new ProcessStartInfo(fakeGame, "/c ping -n 30 127.0.0.1") { CreateNoWindow = true, UseShellExecute = false })!;
-    Thread.Sleep(3000);
-    Check(watcher.Running.Count == 0 && !watcher.ProfileOn, "Off ignores games");
+    Check(SpinWait.SpinUntil(() => watcher.Playing.Values.Any(g => g.Name == "Fake Game"), 15000), "Off still sees games, so their FPS is recorded");
+    Check(watcher.Running.Count == 0 && !watcher.ProfileOn, "but ignores them");
     watcher.Mode = ProfileMode.Automatic;
     Check(watcher.Running.SequenceEqual(["Fake Game"]) && watcher.ProfileOn, "back to Automatic picks up a game that's already running");
     ignored.Kill(entireProcessTree: true);
@@ -308,6 +327,256 @@ var redragon = Rgb.Match([("K530RGB Pro Firmware", @"{7C5A40EF-A0FB-4BFC-874A-C0
 Check(redragon is [{ Name: "OemDrv", Lighting: null, Open: @"shell:AppsFolder\{7C5A40EF-A0FB-4BFC-874A-C0F2E0B9FA8E}\Redragon K530RGB Pro\devtray.exe" }],
       "finds an RGB app by its program's folder too, but never its updater");
 
+// Frame counting: present events in, frame times per game out, PresentMon's way.
+{
+    const long F = 10_000_000; // QPC ticks per second
+    const long Frame = F / 100; // 10 ms
+    const FrameCounter.Kind Dxgi = FrameCounter.Kind.Dxgi, D3d9 = FrameCounter.Kind.D3d9, K171 = FrameCounter.Kind.Kernel171, K168 = FrameCounter.Kind.Kernel168;
+
+    var fc = new FrameCounter(F);
+    for (var i = 0; i < 10; i++) { fc.RuntimeStart(1, 100, Dxgi, 0xA, 0, i * Frame); fc.RuntimeStop(1, 0); fc.RuntimeStart(1, 100, Dxgi, 0xA, 1, i * Frame + 5); fc.RuntimeStop(1, 0); }
+    var ms = fc.Drain(100);
+    Check(ms.Count == 9 && ms.All(m => Math.Abs(m - 10) < 1e-9), "DXGI_PRESENT_TEST calls aren't frames");
+
+    fc = new FrameCounter(F);
+    for (var i = 0; i < 10; i++)
+    {
+        fc.RuntimeStart(1, 100, Dxgi, 0xA, 8, i * Frame); fc.RuntimeStop(1, unchecked((int)0x887A000A)); // DXGI_ERROR_WAS_STILL_DRAWING
+        fc.RuntimeStart(1, 100, Dxgi, 0xA, 0, i * Frame + 3); fc.RuntimeStop(1, 0x087A0001);              // DXGI_STATUS_OCCLUDED
+    }
+    Check(fc.Drain(100).Count == 9, "a failed Present isn't a frame; an occluded one is");
+
+    fc = new FrameCounter(F);
+    for (var i = 0; i < 60; i++) { fc.RuntimeStart(1, 100, Dxgi, 0xA, 0, i * Frame); fc.Kernel(100, K171, 2, i * Frame + 2); fc.Kernel(100, K171, 2, i * Frame + 4); fc.RuntimeStop(1, 0); }
+    Check(fc.Drain(100).Count == 59, "DirectX's own frames win over the kernel's, even when the kernel logs more");
+
+    fc = new FrameCounter(F);
+    for (var i = 0; i < 30; i++) { fc.Kernel(100, K171, 3, i * Frame); fc.Kernel(100, K168, 0, i * Frame + 1); }
+    ms = fc.Drain(100);
+    Check(ms.Count == 29 && Math.Abs(1000 / ms.Average() - 100) < 1e-6, "Vulkan and OpenGL: the kernel's two kinds of present aren't added together");
+
+    fc = new FrameCounter(F);
+    for (var i = 0; i < 30; i++) { fc.Kernel(100, K171, 0x1111, i * Frame); fc.Kernel(100, K171, 0x2222, i * Frame + 1); }
+    Check(Math.Abs(1000 / fc.Drain(100).Average() - 100) < 1e-6, "a hybrid laptop's two graphics chips don't double the count");
+
+    fc = new FrameCounter(F);
+    for (var i = 0; i < 20; i++) { fc.RuntimeStart(1, 100, Dxgi, 0xA, 0, i * Frame); fc.RuntimeStop(1, 0); }
+    for (var i = 0; i < 5; i++) { fc.RuntimeStart(2, 100, D3d9, 0xB, 0, i * 4 * Frame); fc.RuntimeStop(2, 0); }
+    for (var i = 0; i < 50; i++) { fc.RuntimeStart(3, 200, Dxgi, 0xC, 0, i * Frame); fc.RuntimeStop(3, 0); }
+    Check(fc.Drain(100).Count == 19 && fc.Drain(200).Count == 49 && fc.Drain(100).Count == 0, "the busiest swap chain of each process, and each frame once");
+
+    fc = new FrameCounter(F);
+    foreach (var t in new long[] { 0, 2 * Frame, Frame, 3 * Frame, 3 * Frame + 5 * F }) { fc.RuntimeStart(1, 100, Dxgi, 0xA, 0, t); fc.RuntimeStop(1, 0); }
+    ms = fc.Drain(100);
+    Check(ms.Count == 2 && Math.Abs(ms[0] - 20) < 1e-9 && Math.Abs(ms[1] - 10) < 1e-9, "events out of order and gaps over 4 s give no frame time");
+
+    // The same, from the raw events as Windows logs them.
+    var parsed = new FrameCounter(F) { Pids = [100] };
+    void Log(Guid provider, ushort id, uint pid, long qpc, byte[] data, ushort flags = 0x40) =>
+        parsed.Handle(new EtwEvent { Provider = provider, Id = id, Flags = flags, ProcessId = (int)pid, ThreadId = 1, Qpc = qpc, Data = data });
+    byte[] ok = BitConverter.GetBytes(0), present = [.. BitConverter.GetBytes(0xA0UL), 0, 0, 0, 0], test = [.. BitConverter.GetBytes(0xA0UL), 1, 0, 0, 0];
+    for (var i = 0; i < 10; i++)
+    {
+        Log(FrameCounter.Dxgi, 42, 100, i * Frame, present); Log(FrameCounter.Dxgi, 43, 100, i * Frame, ok);
+        Log(FrameCounter.Dxgi, 55, 100, i * Frame + 5, test); Log(FrameCounter.Dxgi, 56, 100, i * Frame + 5, ok);
+        Log(FrameCounter.Dxgi, 42, 200, i * Frame, present); Log(FrameCounter.Dxgi, 43, 200, i * Frame, ok); // not a game
+        Log(FrameCounter.Dxgi, 42, 100, i * Frame + 6, [1, 2]);                                             // cut short
+    }
+    Check(parsed.Drain(100).Count == 9 && parsed.Drain(200).Count == 0, "DXGI events count for a game, but not its TEST presents, short events or other programs");
+    byte[] History(uint model) => [.. BitConverter.GetBytes(0x10UL), .. BitConverter.GetBytes(0UL), .. BitConverter.GetBytes(model)];
+    for (var i = 0; i < 10; i++)
+    {
+        Log(FrameCounter.DxgKrnl, 171, 100, i * Frame, History(2));
+        Log(FrameCounter.DxgKrnl, 171, 100, i * Frame + 1, History(7)); // composition: the desktop's present, not the game's
+        Log(FrameCounter.DxgKrnl, 171, 100, i * Frame + 2, History(7));
+    }
+    Check(parsed.Drain(100) is { Count: 9 } kernel && kernel.All(m => Math.Abs(m - 10) < 1e-9), "the kernel's presents count for Vulkan and OpenGL, without the desktop's");
+    for (var i = 0; i < 5; i++) { Log(FrameCounter.D3d9, 1, 100, i * 2 * Frame, BitConverter.GetBytes(0xB0u), 0x20); Log(FrameCounter.D3d9, 2, 100, i * 2 * Frame, ok, 0x20); }
+    Check(parsed.Drain(100) is { Count: 4 } d3d9 && d3d9.All(m => Math.Abs(m - 20) < 1e-9), "a 32-bit DirectX 9 game's frames");
+    for (var i = 0; i < 5; i++) Log(FrameCounter.DxgKrnl, 168, 100, i * Frame, []);
+    Check(parsed.Drain(100).Count == 4, "and a fullscreen Vulkan game's flips");
+}
+
+// FPS numbers: average, high, 1% and 0.1% lows and the chart, from frame times.
+{
+    static FrameStats Feed(params (int n, double ms)[] runs)
+    {
+        var s = new FrameStats();
+        foreach (var (n, ms) in runs) for (var i = 0; i < n; i++) s.Add(ms);
+        return s;
+    }
+    static bool Near(double? a, double b, double tol = 1e-9) => a is { } x && Math.Abs(x - b) <= tol;
+
+    var e = new FrameStats().Summary();
+    Check(e is { Average: null, High: null, OnePercentLow: null, PointOnePercentLow: null, Last: null, Frames: 0, Seconds: 0 } && e.Points.Length == 0,
+          "nothing to show before any frames");
+    Check(FrameStats.Show(null) == "–" && FrameStats.Show(96.5) == "97" && FrameStats.Show(95.49) == "95", "numbers show as whole FPS or a dash");
+
+    var s = Feed((1000, 10)).Summary();
+    Check(Near(s.Average, 100) && s.High == 100 && Near(s.OnePercentLow, 100) && Near(s.PointOnePercentLow, 100) && s.Seconds == 10, "steady 100 FPS reads 100 everywhere");
+    Check(s.Points.Length == 10 && s.Points.All(p => p == 100) && s.Last == 100 && s.SecondsPerPoint == 1, "one chart point per second");
+
+    s = Feed((990, 10), (10, 50)).Summary();
+    Check(Near(s.Average, 1000.0 * 1000 / 10400) && FrameStats.Show(s.Average) == "96", "the average is frames over time: 96.15");
+    Check(Near(s.OnePercentLow, 20) && Near(s.PointOnePercentLow, 20), "the 1% and 0.1% lows are the slow 50 ms frames: 20 FPS");
+    Check(s.High == 100 && s.Last == 92 && s.Points.Length == 10, "the best second is 100; the one with the slow frames had 92");
+
+    var few = Feed((99, 20));
+    s = few.Summary();
+    Check(Near(s.Average, 50) && s.High == 50 && s.OnePercentLow == null && s.PointOnePercentLow == null, "under 100 frames: no 1% low yet");
+    few.Add(20);
+    s = few.Summary();
+    Check(Near(s.OnePercentLow, 50) && s.PointOnePercentLow == null && s.Frames == 100, "100 frames: a 1% low, still no 0.1% low");
+    s = Feed((500, 1)).Summary();
+    Check(s.Average == null && s.High == null && s.Frames == 500, "nothing shows until the first full second");
+
+    s = Feed((197, 10), (3, 40)).Summary();
+    Check(Near(s.OnePercentLow, 25), "200 frames: the 1% low is the slowest 2 of the three 40 ms frames");
+    s = Feed((297, 10), (2, 25), (1, 100)).Summary();
+    Check(Near(s.OnePercentLow, 20), "the lows are frames over time (100, 25, 25 ms = 20 FPS), not the mean of their FPS");
+    s = Feed((1998, 5), (1, 20), (1, 100)).Summary();
+    Check(Near(s.Average, 2000 * 1000.0 / 10110) && Near(s.OnePercentLow, 20 * 1000.0 / 210) && Near(s.PointOnePercentLow, 2 * 1000.0 / 120),
+          "1% low = 20 frames in 210 ms; 0.1% low = 2 frames in 120 ms");
+
+    var p = new FrameStats();
+    for (var i = 0; i < 100; i++) p.Add(10);
+    p.Add(5000); p.Add(0); p.Add(-3); p.Add(double.NaN); p.Add(double.PositiveInfinity);
+    for (var i = 0; i < 100; i++) p.Add(10);
+    s = p.Summary();
+    Check(s.Frames == 200 && Near(s.Average, 100) && Near(s.OnePercentLow, 100) && s.Points.Length == 2, "a 5 s pause and bad frame times are left out");
+    p.Add(FrameStats.PauseMs);
+    Check(p.Summary() is { Frames: 201 } f && Near(f.OnePercentLow, 2 * 1000.0 / 1010), "a 1 s freeze is a frame, not a pause");
+
+    s = Feed((60_000, 10), (30_000, 20)).Summary();
+    Check(s.Points.Length == 300 && s.SecondsPerPoint == 4 && s.Points[0] == 100 && s.Points[^1] == 50 && s.Seconds == 1200, "a long session's chart points merge to stay under 600");
+    Check(Near(s.Average, 75) && s.High == 100 && Near(s.OnePercentLow, 50) && Near(s.PointOnePercentLow, 50), "and the numbers stay exact");
+
+    var rng = new Random(1);
+    var times = Enumerable.Range(0, 200_000).Select(_ => 4 + rng.NextDouble() * 4 + (rng.Next(200) == 0 ? rng.NextDouble() * 80 : 0)).ToArray();
+    var r = new FrameStats();
+    foreach (var t in times) r.Add(t);
+    s = r.Summary();
+    var slow = times.OrderDescending().ToArray();
+    double Exact(int k) => 1000.0 * k / slow.Take(k).Sum();
+    Check(Near(s.Average, times.Length * 1000 / times.Sum(), 1e-6) && Near(s.OnePercentLow, Exact(2000), Exact(2000) * 0.001)
+          && Near(s.PointOnePercentLow, Exact(200), Exact(200) * 0.001), "random frames: the lows are within 0.1% of sorting every frame");
+
+    s = Feed((2_200_000, 2.5)).Summary();
+    Check(Near(s.Average, 400, 1e-6) && s.Seconds == 5500, "a 90 minute session at 400 FPS still averages 400");
+
+    var shared = new FrameStats();
+    var writer = Task.Run(() => { for (var i = 0; i < 300_000; i++) shared.Add(3.3); });
+    while (!writer.IsCompleted) _ = shared.Summary();
+    writer.Wait();
+    Check(shared.Summary().Frames == 300_000, "adding and reading at the same time loses nothing");
+}
+
+// The recorder: a made-up game's frames through Windows' counter. Process ids 7 and 11 can't be real ones (Windows'
+// are multiples of 4), so no real program's frames get in.
+long fpsAt = 0;
+void Frames(uint pid, int n, double ms)
+{
+    for (var i = 0; i < n; i++)
+    {
+        Fps.Counter.RuntimeStart(1, pid, FrameCounter.Kind.Dxgi, 0xA, 0, fpsAt += (long)Math.Round(ms * Stopwatch.Frequency / 1000));
+        Fps.Counter.RuntimeStop(1, 0);
+    }
+}
+var fpsGame = new Game("Fps Game", @"C:\Games\Fps", "Steam");
+Check(Fps.Update(new() { [7] = fpsGame, [11] = fpsGame }, profileOn: true).Count == 0 && Fps.Error == null,
+      $"frames are counted while a game runs ({Fps.Error})");
+Frames(11, 20, 16.7); // a launcher in the game's folder: a few frames
+Frames(7, 1, 10);
+for (var second = 0; second < 40; second++)
+{
+    Frames(7, 95, 10);
+    Frames(7, 1, 50); // one hitch a second
+    Fps.Tick(second is < 20 or >= 30 ? 7u : 0); // alt-tabbed for 10 seconds
+}
+fpsAt += 3 * Stopwatch.Frequency; // a loading screen
+Frames(7, 1, 10);
+Fps.Tick(7);
+Frames(7, 200, 10);
+Fps.Counter.RuntimeStart(1, 7, FrameCounter.Kind.Dxgi, 0xA, 0, fpsAt - 5); // out of order: no frame time
+Fps.Counter.RuntimeStop(1, 0);
+Fps.Tick(7);
+Check(Fps.Now() is { Session.Game: "Fps Game", Current: > 99.9 and < 100.1, InFront: true }, "the game being played shows live");
+Check(Fps.Update(new() { [7] = fpsGame }, true).Count == 0, "the launcher closing doesn't end the session");
+var played = Fps.Update([], false);
+Check(played is [{ Game: "Fps Game", Profile: true, Seconds: 28, High: 100, Low1: 20, Low01: 20, Step: 1, Chart.Length: 28 }]
+      && Math.Abs(played[0].Average!.Value - 2696 / 28.0) < 1e-9,
+      "one session per game, from the process that drew most, without the loading screen, the alt-tabbed seconds or the 2 s after each switch to the game");
+Check(Etw.Stop(Fps.SessionName) == 4201, "frame counting stops when no game runs");
+Fps.Update(new() { [15] = fpsGame }, false);
+for (var i = 0; i < 3; i++)
+{
+    Frames(15, 300, 10);
+    Fps.Tick(15);
+}
+Check(Fps.Update([], false).Count == 0 && Fps.Now() == null, "a session under 10 seconds isn't kept");
+
+for (var i = 0; i < 25; i++) Fps.Save(played[0] with { Seconds = 100 + i });
+Check(Fps.History() is { Count: 20 } history && history[0].Seconds == 124 && history[^1].Seconds == 105 && history[0].Chart.SequenceEqual(played[0].Chart),
+      "keeps the last 20 sessions, newest first");
+Settings.SetText("FpsSessions", "{ half writ");
+Check(Fps.History().Count == 0, "a damaged session history reads as empty");
+Check(new SessionRow(played[0] with { Average = 127.6 }, played[0] with { Average = 112.3 }).Change == "+14%"
+      && new SessionRow(played[0], null).Change == "" && new SessionRow(played[0] with { Low1 = null }, null).Low1 == "–",
+      "a session compares with that game's one before, and shows a dash for a number it hasn't got");
+
+// Windows' trace sessions (needs admin, like the app).
+using (var source = new TestSource())
+{
+    var before = Stopwatch.GetTimestamp();
+    (int Pid, int Tid, ushort Flags, long Qpc, int Value, string? On) first = default;
+    var thread = GetCurrentThreadId();
+    using var arrived = new ManualResetEventSlim();
+    var etw = new Etw("Optimiser Test", e =>
+    {
+        if (e.Provider != source.Guid || e.Id != 1 || arrived.IsSet) return; // skips ETW's own header event and the manifest
+        first = (e.ProcessId, e.ThreadId, e.Flags, e.Qpc, BitConverter.ToInt32(e.Data), Thread.CurrentThread.Name);
+        arrived.Set();
+    });
+    var enabled = etw.Enable(source.Guid, 1);
+    for (var i = 0; i < 100 && !arrived.IsSet; i++) // enabling is asynchronous and ETW delivers about once a second
+    {
+        source.Ping(42);
+        arrived.Wait(100);
+    }
+    etw.Dispose();
+    Check(enabled == 0 && arrived.IsSet && first.Value == 42 && first.Pid == Environment.ProcessId && first.Tid == (int)thread
+          && (first.Flags & 0x40) != 0 && first.Qpc > before && first.Qpc <= Stopwatch.GetTimestamp(),
+          "ETW delivers an event with its process, thread, QPC time and payload");
+    Check(first.On == "ETW Optimiser Test" && etw.Finished.Wait(10_000) && etw.Error is null,
+          "the handler runs on the session's own thread, and disposing ends that thread");
+}
+
+// What a game's frames look like to the counter, end to end: a WARP (software) device presenting to a small window.
+using (var swapChain = new WarpSwapChain())
+{
+    var pid = (uint)Environment.ProcessId;
+    var counter = new FrameCounter(Stopwatch.Frequency) { Pids = [pid] };
+    var etw = new Etw("Optimiser Test", counter.Handle);
+    uint[] errors = [etw.Enable(FrameCounter.DxgKrnl, Environment.OSVersion.Version.Build >= 22000 ? 0x8000001UL : 0x1, 171, 168),
+                     etw.Enable(FrameCounter.Dxgi, 0x8000000000000002, 42, 43, 55, 56), etw.Enable(FrameCounter.D3d9, 0x8000000000000002, 1, 2)];
+    var frames = 0;
+    for (var i = 0; i < 200 && frames < 20; i++)
+    {
+        swapChain.Present();
+        Thread.Sleep(20);
+        frames += counter.Drain(pid).Count;
+    }
+    etw.Dispose();
+    Check(errors.All(e => e == 0) && frames >= 20 && etw.Finished.Wait(10_000) && etw.Error is null,
+          $"this process's DirectX frames reach the frame counter ({string.Join(", ", errors)}; {frames} frames)");
+}
+
+var orphan = new Etw("Optimiser Test", _ => { }); // never disposed, as after a crash
+var next = new Etw("Optimiser Test", _ => { });
+next.Dispose();                                   // straight away, before its thread may even have started
+Check(orphan.Finished.Wait(10_000) && next.Finished.Wait(10_000) && Etw.Stop("Optimiser Test") == 4201,
+      "a stale trace session is replaced, and disposing stops it");
+
 string[] tiles = ["GPU load", "CPU load", "Memory", "Power"];
 Check(tiles.OrderBy(t => StatTile.Rank(t, "Memory|GPU load")).SequenceEqual(["Memory", "GPU load", "CPU load", "Power"])
       && tiles.OrderBy(t => StatTile.Rank(t, null)).SequenceEqual(tiles),
@@ -333,4 +602,14 @@ static void Check(bool ok, string what)
 {
     Console.WriteLine($"{(ok ? "ok  " : "FAIL")} {what}");
     if (!ok) Environment.Exit(1);
+}
+
+[System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+
+[System.Diagnostics.Tracing.EventSource(Name = "Optimiser-Test")]
+sealed class TestSource : System.Diagnostics.Tracing.EventSource
+{
+    public static class Keywords { public const System.Diagnostics.Tracing.EventKeywords Test = (System.Diagnostics.Tracing.EventKeywords)1; }
+
+    [System.Diagnostics.Tracing.Event(1, Keywords = Keywords.Test)] public void Ping(int value) => WriteEvent(1, value);
 }

@@ -87,6 +87,47 @@
       </Setter>
     </Style>
 
+    <!-- One row in Recent sessions: picking it shows that session in the chart -->
+    <Style x:Key="SessionRow" TargetType="RadioButton">
+      <Setter Property="GroupName" Value="Sessions" />
+      <Setter Property="Foreground" Value="{StaticResource Text}" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="AutomationProperties.Name" Value="{Binding Summary}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="Box" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="6" Padding="10,8">
+              <ContentPresenter />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Box" Property="Background" Value="{StaticResource Bg}" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Box" Property="Background" Value="{StaticResource Line}" />
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Box" Property="Background" Value="{StaticResource Line}" />
+                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- A numbered FPS figure: label over a big number -->
+    <Style x:Key="FpsLabel" TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Cursor" Value="Help" />
+    </Style>
+    <Style x:Key="FpsNumber" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="28" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+
     <!-- Text box with a hint shown while it's empty (the hint goes in Tag) -->
     <Style x:Key="Field" TargetType="TextBox">
       <Setter Property="Foreground" Value="{StaticResource Text}" />
@@ -409,9 +450,89 @@
       <ScrollViewer x:Name="Stats" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="0,0,0,16">
           <TextBlock x:Name="StatsIntro" Style="{StaticResource MutedText}" FontSize="15" MaxWidth="720" HorizontalAlignment="Left" />
+
+          <!-- Frame rate: the game being played, or the session picked below, or the last one -->
+          <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,4">
+                <Border x:Name="FpsLive" DockPanel.Dock="Right" Style="{StaticResource Badge}" Visibility="Collapsed">
+                  <TextBlock Text="Recording" Foreground="{StaticResource Good}" />
+                </Border>
+                <TextBlock Text="Frame rate" Style="{StaticResource PanelTitle}" Margin="0" VerticalAlignment="Center" />
+              </DockPanel>
+              <TextBlock x:Name="FpsTitle" Style="{StaticResource MutedText}" FontSize="13" />
+              <StackPanel x:Name="FpsFigures">
+                <UniformGrid Columns="5" Margin="0,18,0,0">
+                  <StackPanel ToolTip="Frames drawn divided by time played. The FPS you get most of the time.">
+                    <TextBlock Text="Average" Style="{StaticResource FpsLabel}" />
+                    <TextBlock x:Name="FpsAverage" Style="{StaticResource FpsNumber}" />
+                  </StackPanel>
+                  <StackPanel ToolTip="The best single second.">
+                    <TextBlock Text="High" Style="{StaticResource FpsLabel}" />
+                    <TextBlock x:Name="FpsHigh" Style="{StaticResource FpsNumber}" />
+                  </StackPanel>
+                  <StackPanel ToolTip="The average FPS of the slowest 1% of frames. Close to the average means smooth; far below means stutter. Shows after 100 frames.">
+                    <TextBlock Text="1% low" Style="{StaticResource FpsLabel}" />
+                    <TextBlock x:Name="FpsLow1" Style="{StaticResource FpsNumber}" />
+                  </StackPanel>
+                  <StackPanel ToolTip="The average FPS of the slowest 0.1% of frames: the worst hitches. Shows after 1,000 frames.">
+                    <TextBlock Text="0.1% low" Style="{StaticResource FpsLabel}" />
+                    <TextBlock x:Name="FpsLow01" Style="{StaticResource FpsNumber}" />
+                  </StackPanel>
+                  <StackPanel ToolTip="How long a frame takes on average.">
+                    <TextBlock Text="Frame time" Style="{StaticResource FpsLabel}" />
+                    <TextBlock x:Name="FpsFrame" Style="{StaticResource FpsNumber}" />
+                  </StackPanel>
+                </UniformGrid>
+                <local:FpsChart x:Name="FpsChart" Margin="0,22,0,0" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
           <UniformGrid x:Name="Tiles" Columns="3" Margin="-6,20,-6,0" Background="Transparent"
                        PreviewMouseLeftButtonDown="OnTileDown" MouseMove="OnTileMove"
                        PreviewMouseLeftButtonUp="OnTileUp" LostMouseCapture="OnTileDrop" />
+
+          <!-- Past sessions, newest first, to compare before and after a change -->
+          <Border x:Name="Sessions" Style="{StaticResource Panel}" Margin="0,8,0,0" Visibility="Collapsed">
+            <StackPanel>
+              <TextBlock Text="Recent sessions" Style="{StaticResource PanelTitle}" />
+              <Grid Margin="10,0,10,6" TextElement.Foreground="{StaticResource Muted}" TextElement.FontSize="12.5">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="120" /><ColumnDefinition /><ColumnDefinition Width="90" />
+                  <ColumnDefinition Width="80" /><ColumnDefinition Width="90" /><ColumnDefinition Width="80" /><ColumnDefinition Width="110" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="When" />
+                <TextBlock Grid.Column="1" Text="Game" />
+                <TextBlock Grid.Column="2" Text="Played" />
+                <TextBlock Grid.Column="3" Text="Average" />
+                <TextBlock Grid.Column="4" Text="vs last time" ToolTip="Average FPS against this game's session before it" />
+                <TextBlock Grid.Column="5" Text="1% low" />
+                <TextBlock Grid.Column="6" Text="Gaming profile" />
+              </Grid>
+              <ItemsControl x:Name="SessionList">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <RadioButton Style="{StaticResource SessionRow}" Click="OnSession">
+                      <Grid>
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="120" /><ColumnDefinition /><ColumnDefinition Width="90" />
+                          <ColumnDefinition Width="80" /><ColumnDefinition Width="90" /><ColumnDefinition Width="80" /><ColumnDefinition Width="110" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding When}" Foreground="{StaticResource Muted}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Session.Game}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="2" Text="{Binding Played}" />
+                        <TextBlock Grid.Column="3" Text="{Binding Average}" />
+                        <TextBlock Grid.Column="4" Text="{Binding Change}" Foreground="{StaticResource Muted}" />
+                        <TextBlock Grid.Column="5" Text="{Binding Low1}" />
+                        <TextBlock Grid.Column="6" Text="{Binding Profile}" />
+                      </Grid>
+                    </RadioButton>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
         </StackPanel>
       </ScrollViewer>
 
