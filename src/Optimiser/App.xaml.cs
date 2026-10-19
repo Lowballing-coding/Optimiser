@@ -124,6 +124,7 @@ public partial class App : Application
         if (!e.Args.Contains("--snapshot"))
         {
             Rgb.Start(); // puts back the colour picked on the RGB page
+            Overclock.Start();
             var everySecond = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             everySecond.Tick += (_, _) => Fps.Tick(); // the frames of a game being played
             everySecond.Start();
@@ -264,6 +265,7 @@ public partial class App : Application
         tray?.Dispose();
         try { Watcher?.Dispose(); } catch { } // puts the power mode back; first, as it matters most
         try { foreach (var session in Fps.Update([], false)) Fps.Save(session); } catch { } // a game still running: keep its session
+        Overclock.Shutdown();
         base.OnExit(e);
     }
 }
