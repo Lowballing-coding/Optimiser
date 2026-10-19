@@ -156,6 +156,7 @@ public partial class App : Application
                     Watcher.Games = games; // the watcher checks each game's own profile switch
                     Watcher.CheckRunning();
                 }
+                GameWatcher.ForgetDedicatedGpu(Backup, games);
                 return games;
             });
         }

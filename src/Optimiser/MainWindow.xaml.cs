@@ -607,9 +607,10 @@ public partial class MainWindow : Window
     async void OnRemoveGame(object sender, RoutedEventArgs e)
     {
         var game = ((GameRow)((FrameworkElement)sender).DataContext).Game;
-        Optimiser.Games.Remove(game.Folder); // "Games" alone is the page
+        Optimiser.Games.Remove(game); // "Games" alone is the page
         await App.ScanGames();
-        StatusText.Text = $"Removed {game.Name}.";
+        StatusText.Text = game.Source == Optimiser.Games.AddedByYou ? $"Removed {game.Name}."
+            : $"Removed {game.Name}. To bring it back, add its folder: {game.Folder}";
     }
 
     void ShowChanges()
