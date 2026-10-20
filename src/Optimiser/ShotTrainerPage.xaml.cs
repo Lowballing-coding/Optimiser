@@ -44,7 +44,8 @@ public partial class ShotTrainerPage : UserControl
         }
         Buttons.Visibility = Keys.Visibility = WithGameRow.Visibility = WithGamePanel.Visibility = Controls.Visibility = Visibility.Visible;
         (State.Text, StateDot.Fill) = Training.Running ? ("Training is running.", Paint("Good"))
-                                                       : ("Not running. Start it here or from the RL Trainer shortcut.", Paint("Muted"));
+                                    : Training.GameUpdating() ? ($"{Training.UpdatingNote} Training can start once it's done.", Paint("Warn"))
+                                    : ("Not running. Start it here or from the RL Trainer shortcut.", Paint("Muted"));
         WithGame.IsChecked = Settings.Get(Training.WithGameSetting, false);
         ShowSettings(Training.Load());
         if (ClipsTab.IsVisible) ShowClips();
@@ -102,7 +103,11 @@ public partial class ShotTrainerPage : UserControl
     void OnShot(object sender, RoutedEventArgs e) => Change(s =>
         s["shots"] = new JsonArray(ShotList.Children.Cast<DockPanel>().Select(r => (JsonNode?)(((CheckBox)r.Children[0]).IsChecked == true)).ToArray()));
 
-    void OnLaunch(object sender, RoutedEventArgs e) => Training.LaunchGame();
+    void OnLaunch(object sender, RoutedEventArgs e)
+    {
+        Training.LaunchGame();
+        if (Training.GameUpdating()) (State.Text, StateDot.Fill) = ($"{Training.UpdatingNote} It opens when the update is done.", Paint("Warn"));
+    }
 
     void OnMatch(object sender, RoutedEventArgs e)
     {
@@ -116,7 +121,9 @@ public partial class ShotTrainerPage : UserControl
             (State.Text, StateDot.Fill) = ("Match mode isn't set up in the trainer folder yet.", Paint("Warn"));
             return;
         }
-        (State.Text, StateDot.Fill) = ("Starting a 1v1 match against Necto.", Paint("Warn"));
+        (State.Text, StateDot.Fill) = Training.GameUpdating()
+            ? ($"{Training.UpdatingNote} The match starts by itself when it's done.", Paint("Warn"))
+            : ("Starting a 1v1 match against Necto.", Paint("Warn"));
     }
 
     void OnStart(object sender, RoutedEventArgs e)
@@ -127,7 +134,9 @@ public partial class ShotTrainerPage : UserControl
             return;
         }
         Training.Start();
-        (State.Text, StateDot.Fill) = ("Starting Rocket League with the trainer. The first shot comes after the kickoff.", Paint("Warn"));
+        (State.Text, StateDot.Fill) = Training.GameUpdating()
+            ? ($"{Training.UpdatingNote} Training starts by itself when it's done.", Paint("Warn"))
+            : ("Starting Rocket League with the trainer. The first shot comes after the kickoff.", Paint("Warn"));
     }
 
     void OnRetry(object sender, RoutedEventArgs e) => Command("retry");

@@ -609,6 +609,14 @@ Check(Training.Number(training, "bot_skill", 0) == 80 && Training.Number(trainin
       "shot trainer settings save without losing keys Optimiser doesn't know");
 Check(training["cmd"]!.ToString() == "next" && Training.Number(training, "cmd_id", 0) == 3,
       "each shot trainer command bumps cmd_id, so the trainer acts on it once");
+Training.EpicManifests = Path.Combine(temp, "Manifests");
+Check(!Training.GameUpdating(), "no Epic manifests: Rocket League isn't updating");
+Directory.CreateDirectory(Path.Combine(Training.EpicManifests, "Pending"));
+File.WriteAllText(Path.Combine(Training.EpicManifests, "rl.item"), """{"AppName": "Sugar", "bIsIncompleteInstall": false}""");
+File.WriteAllText(Path.Combine(Training.EpicManifests, "fn.item"), """{"AppName": "Fortnite", "bIsIncompleteInstall": true}""");
+Check(!Training.GameUpdating(), "installed Rocket League, another game updating: not updating");
+File.Move(Path.Combine(Training.EpicManifests, "rl.item"), Path.Combine(Training.EpicManifests, "Pending", "rl.item"));
+Check(Training.GameUpdating(), "Rocket League's manifest in Pending: updating");
 Check(Training.Clips().Count == 0, "no clips folder: no clips");
 Directory.CreateDirectory(Training.ClipsFolder);
 var older = Path.Combine(Training.ClipsFolder, "older.mp4");
