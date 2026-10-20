@@ -592,6 +592,38 @@ Check(tiles.OrderBy(t => StatTile.Rank(t, "Memory|GPU load")).SequenceEqual(["Me
       && tiles.OrderBy(t => StatTile.Rank(t, null)).SequenceEqual(tiles),
       "stat tiles follow the saved order, with new ones after it in their usual order");
 
+Training.Folder = Path.Combine(temp, "rl-shot-trainer");
+Directory.CreateDirectory(Training.Folder);
+Check(!Training.Installed && Training.Load().Count == 0, "no shot trainer: not installed, and its settings read as empty");
+File.WriteAllText(Path.Combine(Training.Folder, "settings.json"),
+    """{"bot_skill": 35.0, "order": "In order", "repeat": false, "shots": [true, false], "cmd": "", "cmd_id": 1, "later": 7}""");
+var training = Training.Load();
+training["bot_skill"] = 80.0;
+Training.Save(training);
+Training.Send("retry");
+Training.Send("next");
+training = Training.Load();
+Check(Training.Number(training, "bot_skill", 0) == 80 && Training.Number(training, "head_start", 0.5) == 0.5
+      && !Training.Flag(training, "repeat", true) && Training.Number(training, "later", 0) == 7
+      && training["shots"]!.AsArray().Count == 2 && !File.Exists(Path.Combine(Training.Folder, "settings.json.tmp")),
+      "shot trainer settings save without losing keys Optimiser doesn't know");
+Check(training["cmd"]!.ToString() == "next" && Training.Number(training, "cmd_id", 0) == 3,
+      "each shot trainer command bumps cmd_id, so the trainer acts on it once");
+Check(Training.Clips().Count == 0, "no clips folder: no clips");
+Directory.CreateDirectory(Training.ClipsFolder);
+var older = Path.Combine(Training.ClipsFolder, "older.mp4");
+var newer = Path.Combine(Training.ClipsFolder, "newer.mp4");
+File.WriteAllText(older, "");
+File.SetLastWriteTime(older, DateTime.Now.AddHours(-1));
+File.WriteAllText(newer, "");
+File.WriteAllText(Path.ChangeExtension(newer, ".json"), """{"shot": "6. Wall air dribble", "result": "GOAL!"}""");
+var clips = Training.Clips();
+Check(clips.Count == 2 && clips[0].Shot == "6. Wall air dribble" && clips[0].Result == "GOAL!" && clips[1].Shot == "older",
+      "clips list newest first, named from their .json, or from the file without one");
+Training.Delete(clips[0]);
+Check(!File.Exists(newer) && !File.Exists(Path.ChangeExtension(newer, ".json")) && Training.Clips().Count == 1,
+      "deleting a clip removes its video and its .json");
+
 Directory.Delete(temp, true);
 Registry.CurrentUser.DeleteSubKeyTree(sub);
 Console.WriteLine("All checks passed");

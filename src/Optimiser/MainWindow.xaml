@@ -49,44 +49,6 @@
       </Style.Triggers>
     </Style>
 
-    <!-- Automatic / On / Off for the gaming profile -->
-    <Style x:Key="SegmentBox" TargetType="Border">
-      <Setter Property="Background" Value="{StaticResource Bg}" />
-      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
-      <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="7" />
-      <Setter Property="Padding" Value="3" />
-      <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-    <Style x:Key="Segment" TargetType="RadioButton">
-      <Setter Property="Foreground" Value="{StaticResource Muted}" />
-      <Setter Property="FontSize" Value="13" />
-      <Setter Property="Cursor" Value="Hand" />
-      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="RadioButton">
-            <Border x:Name="Box" Background="Transparent" CornerRadius="5" Padding="14,5">
-              <ContentPresenter HorizontalAlignment="Center" />
-            </Border>
-            <ControlTemplate.Triggers>
-              <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Foreground" Value="{StaticResource Text}" />
-              </Trigger>
-              <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="Box" Property="Background" Value="{StaticResource Line}" />
-              </Trigger>
-              <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="Box" Property="Background" Value="{StaticResource Accent}" />
-                <Setter Property="Foreground" Value="{StaticResource Bg}" />
-                <Setter Property="FontWeight" Value="SemiBold" />
-              </Trigger>
-            </ControlTemplate.Triggers>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-    </Style>
-
     <!-- One row in Recent sessions: picking it shows that session in the chart -->
     <Style x:Key="SessionRow" TargetType="RadioButton">
       <Setter Property="GroupName" Value="Sessions" />
@@ -273,6 +235,7 @@
             <RadioButton Style="{StaticResource Nav}" Content="&#xE81C;" Tag="Backups" Checked="OnNav" />
             <RadioButton x:Name="RgbNav" Style="{StaticResource Nav}" Content="&#xE790;" Tag="RGB" Checked="OnNav" />
             <RadioButton x:Name="OverclockNav" Style="{StaticResource Nav}" Content="&#xE950;" Tag="Overclock" Checked="OnNav" />
+            <RadioButton x:Name="TrainerNav" Style="{StaticResource Nav}" Content="&#xE768;" Tag="Shot Trainer" Checked="OnNav" />
           </StackPanel>
         </DockPanel>
       </Border>
@@ -573,6 +536,7 @@
       <local:RgbPage x:Name="RGB" Visibility="Collapsed" />
 
       <local:OverclockPage x:Name="Overclock" Visibility="Collapsed" />
+      <local:ShotTrainerPage x:Name="ShotTrainer" Visibility="Collapsed" />
 
       <ScrollViewer x:Name="Settings" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="0,0,14,28">
