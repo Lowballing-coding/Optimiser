@@ -106,6 +106,27 @@ public static class Training
             && Settings.Get(WithGameSetting, false) && Installed && !Running) Start();
     }
 
+    public static string EpicManifests = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Epic", "EpicGamesLauncher", "Data", "Manifests");
+
+    // While Epic patches Rocket League ("Sugar"), its install manifest moves to Manifests\Pending and is marked incomplete.
+    // Epic then refuses to launch the game, so starting training would look like nothing happened.
+    public static bool GameUpdating()
+    {
+        try
+        {
+            return Directory.EnumerateFiles(EpicManifests, "*.item", System.IO.SearchOption.AllDirectories).Any(file =>
+            {
+                var item = Read(file);
+                return item["AppName"]?.ToString() == "Sugar"
+                    && (Path.GetFileName(Path.GetDirectoryName(file)) == "Pending" || Flag(item, "bIsIncompleteInstall", false));
+            });
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    public const string UpdatingNote = "Rocket League is updating in the Epic Games Launcher.";
+
     // Rocket League on its own, through Epic (namespace:catalog item:app name).
     public static void LaunchGame() =>
         Tweaks.OpenAsYou("com.epicgames.launcher://apps/9773aa1aa54f4f7b80e44bef04986cea%3A530145df28a24424923f5828cc9031a1%3ASugar?action=launch&silent=true");
