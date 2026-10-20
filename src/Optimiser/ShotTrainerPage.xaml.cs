@@ -39,12 +39,13 @@ public partial class ShotTrainerPage : UserControl
         if (!Training.Installed)
         {
             (State.Text, StateDot.Fill) = ($"The shot trainer isn't in {Training.Folder}.", Paint("Muted"));
-            Buttons.Visibility = Keys.Visibility = Controls.Visibility = Visibility.Collapsed;
+            Buttons.Visibility = Keys.Visibility = WithGameRow.Visibility = WithGamePanel.Visibility = Controls.Visibility = Visibility.Collapsed;
             return;
         }
-        Buttons.Visibility = Keys.Visibility = Controls.Visibility = Visibility.Visible;
+        Buttons.Visibility = Keys.Visibility = WithGameRow.Visibility = WithGamePanel.Visibility = Controls.Visibility = Visibility.Visible;
         (State.Text, StateDot.Fill) = Training.Running ? ("Training is running.", Paint("Good"))
                                                        : ("Not running. Start it here or from the RL Trainer shortcut.", Paint("Muted"));
+        WithGame.IsChecked = Settings.Get(Training.WithGameSetting, false);
         ShowSettings(Training.Load());
         if (ClipsTab.IsVisible) ShowClips();
     }
@@ -88,6 +89,8 @@ public partial class ShotTrainerPage : UserControl
         var slider = (Slider)sender;
         Change(s => s[(string)slider.Tag] = Math.Round(slider.Value, 1));
     }
+
+    void OnWithGame(object sender, RoutedEventArgs e) => Settings.Set(Training.WithGameSetting, WithGame.IsChecked == true);
 
     void OnSwitch(object sender, RoutedEventArgs e)
     {
@@ -203,7 +206,7 @@ public partial class ShotTrainerPage : UserControl
     public void ShowSample()
     {
         sample = true;
-        Buttons.Visibility = Keys.Visibility = Controls.Visibility = Visibility.Visible;
+        Buttons.Visibility = Keys.Visibility = WithGameRow.Visibility = WithGamePanel.Visibility = Controls.Visibility = Visibility.Visible;
         (State.Text, StateDot.Fill) = ("Training is running.", Paint("Good"));
         ShowSettings(new JsonObject
         {

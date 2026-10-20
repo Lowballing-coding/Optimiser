@@ -37,7 +37,13 @@ public sealed class GameWatcher : IDisposable
     public GameWatcher(Backup backup)
     {
         this.backup = backup;
-        starts.EventArrived += (_, e) => OnStart((uint)e.NewEvent["ProcessID"]);
+        starts.EventArrived += (_, e) =>
+        {
+            var pid = (uint)e.NewEvent["ProcessID"];
+            try { if (ExePath(pid) is { } exe) Training.OnGameStart(exe); }
+            catch { } // only a convenience: the game still opens without the trainer
+            OnStart(pid);
+        };
         stops.EventArrived += (_, e) => OnStop((uint)e.NewEvent["ProcessID"]);
         mode = SavedMode;
         starts.Start();

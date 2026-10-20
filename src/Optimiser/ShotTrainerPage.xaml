@@ -129,6 +129,16 @@
             </StackPanel>
             <TextBlock x:Name="Keys" Style="{StaticResource MutedText}" FontSize="13" Margin="0,14,0,0"
                        Text="In game: click the right stick to retry a shot, D-pad left and right to change shot, D-pad up to save a clip." />
+            <Border x:Name="WithGameRow" Height="1" Background="{StaticResource Line}" Margin="0,20,0,16" />
+            <DockPanel x:Name="WithGamePanel">
+              <CheckBox x:Name="WithGame" DockPanel.Dock="Right" Style="{StaticResource Switch}" Margin="24,0,0,0" Click="OnWithGame"
+                        AutomationProperties.Name="Start with Rocket League" />
+              <StackPanel>
+                <TextBlock Text="Start with Rocket League" FontWeight="SemiBold" />
+                <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="0,4,0,0" MaxWidth="720" HorizontalAlignment="Left"
+                           Text="When you open Rocket League, the trainer starts too. RLBot reopens the game once to join it. Needs Optimiser running in the background." />
+              </StackPanel>
+            </DockPanel>
           </StackPanel>
         </Border>
 
