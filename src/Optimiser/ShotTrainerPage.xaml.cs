@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Automation;
@@ -90,7 +89,7 @@ public partial class ShotTrainerPage : UserControl
     }
 
     void OnShot(object sender, RoutedEventArgs e) => Change(s =>
-        s["shots"] = new JsonArray([.. ShotList.Children.Cast<DockPanel>().Select(r => (JsonNode?)(((CheckBox)r.Children[0]).IsChecked == true))]));
+        s["shots"] = new JsonArray(ShotList.Children.Cast<DockPanel>().Select(r => (JsonNode?)(((CheckBox)r.Children[0]).IsChecked == true)).ToArray()));
 
     void OnStart(object sender, RoutedEventArgs e)
     {

@@ -21,7 +21,6 @@
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
       <Setter Property="Margin" Value="0,10,0,0" />
-      <Setter Property="AutomationProperties.Name" Value="{Binding Tag, RelativeSource={RelativeSource Self}}" />
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Slider">
@@ -105,52 +104,52 @@
             </Grid.ColumnDefinitions>
             <StackPanel>
               <DockPanel>
-                <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=Skill, StringFormat={}{0:0}}" />
+                <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=Skill, StringFormat='{}{0:0}'}" />
                 <TextBlock Style="{StaticResource SliderName}" Text="Bot skill" />
               </DockPanel>
-              <Slider x:Name="Skill" Style="{StaticResource Range}" Tag="bot_skill" Minimum="0" Maximum="100" TickFrequency="5"
+              <Slider x:Name="Skill" AutomationProperties.Name="Bot skill" Style="{StaticResource Range}" Tag="bot_skill" Minimum="0" Maximum="100" TickFrequency="5"
                       ValueChanged="OnSlider" />
               <TextBlock Style="{StaticResource SliderHint}" Text="How well Necto plays. Around 70 is a Plat or Diamond opponent." />
 
               <DockPanel>
-                <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=HeadStart, StringFormat={}{0:0.0} s}" />
+                <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=HeadStart, StringFormat='{}{0:0.0} s'}" />
                 <TextBlock Style="{StaticResource SliderName}" Text="Bot reaction time" />
               </DockPanel>
-              <Slider x:Name="HeadStart" Style="{StaticResource Range}" Tag="head_start" Minimum="0" Maximum="2" TickFrequency="0.1"
+              <Slider x:Name="HeadStart" AutomationProperties.Name="Bot reaction time" Style="{StaticResource Range}" Tag="head_start" Minimum="0" Maximum="2" TickFrequency="0.1"
                       ValueChanged="OnSlider" />
               <TextBlock Style="{StaticResource SliderHint}" Text="How long the bot waits in its net before it moves." />
 
               <DockPanel>
-                <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=Countdown, StringFormat={}{0:0} s}" />
+                <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=Countdown, StringFormat='{}{0:0} s'}" />
                 <TextBlock Style="{StaticResource SliderName}" Text="Countdown" />
               </DockPanel>
-              <Slider x:Name="Countdown" Style="{StaticResource Range}" Tag="countdown" Minimum="0" Maximum="5" TickFrequency="1"
+              <Slider x:Name="Countdown" AutomationProperties.Name="Countdown" Style="{StaticResource Range}" Tag="countdown" Minimum="0" Maximum="5" TickFrequency="1"
                       ValueChanged="OnSlider" />
               <TextBlock Style="{StaticResource SliderHint}" Text="The 3-2-1 before each shot, with the ball frozen." />
             </StackPanel>
 
             <StackPanel Grid.Column="2">
               <DockPanel>
-                <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=BallSpeed, StringFormat={}{0:0}%}" />
+                <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=BallSpeed, StringFormat='{}{0:0}%'}" />
                 <TextBlock Style="{StaticResource SliderName}" Text="Ball speed" />
               </DockPanel>
-              <Slider x:Name="BallSpeed" Style="{StaticResource Range}" Tag="ball_speed" Minimum="50" Maximum="150" TickFrequency="5"
+              <Slider x:Name="BallSpeed" AutomationProperties.Name="Ball speed" Style="{StaticResource Range}" Tag="ball_speed" Minimum="50" Maximum="150" TickFrequency="5"
                       ValueChanged="OnSlider" />
               <TextBlock Style="{StaticResource SliderHint}" Text="How fast each shot is launched at you." />
 
               <DockPanel>
-                <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=ShotTime, StringFormat={}{0:0}%}" />
+                <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=ShotTime, StringFormat='{}{0:0}%'}" />
                 <TextBlock Style="{StaticResource SliderName}" Text="Time per shot" />
               </DockPanel>
-              <Slider x:Name="ShotTime" Style="{StaticResource Range}" Tag="shot_time" Minimum="50" Maximum="200" TickFrequency="10"
+              <Slider x:Name="ShotTime" AutomationProperties.Name="Time per shot" Style="{StaticResource Range}" Tag="shot_time" Minimum="50" Maximum="200" TickFrequency="10"
                       ValueChanged="OnSlider" />
               <TextBlock Style="{StaticResource SliderHint}" Text="More time makes it easier to score." />
 
               <DockPanel>
-                <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=Variation, StringFormat={}{0:0}%}" />
+                <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=Variation, StringFormat='{}{0:0}%'}" />
                 <TextBlock Style="{StaticResource SliderName}" Text="Variation" />
               </DockPanel>
-              <Slider x:Name="Variation" Style="{StaticResource Range}" Tag="variation" Minimum="0" Maximum="100" TickFrequency="10"
+              <Slider x:Name="Variation" AutomationProperties.Name="Variation" Style="{StaticResource Range}" Tag="variation" Minimum="0" Maximum="100" TickFrequency="10"
                       ValueChanged="OnSlider" />
               <TextBlock Style="{StaticResource SliderHint}" Text="Moves each shot around a little, so it isn't the same every time." />
             </StackPanel>
