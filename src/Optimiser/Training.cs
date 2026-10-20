@@ -65,11 +65,12 @@ public static class Training
         Save(s);
     }
 
-    // play.bat starts the game and the trainer without the trainer's old settings window, which would overwrite
-    // this page's changes. Through Explorer so it runs as Peter, not as admin like Optimiser.
+    // Like the trainer's start.bat, minus its old settings window, which would overwrite this page's changes.
+    // Through Explorer so it runs as Peter, not as admin like Optimiser.
     public static void Start()
     {
         var play = Path.Combine(Folder, "play.bat");
-        Tweaks.OpenAsYou(File.Exists(play) ? play : Path.Combine(Folder, "start.bat"));
+        if (!File.Exists(play)) File.WriteAllText(play, "@echo off\r\ncd /d \"%~dp0\"\r\nvenv\\Scripts\\python run.py\r\npause\r\n");
+        Tweaks.OpenAsYou(play);
     }
 }

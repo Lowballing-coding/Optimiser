@@ -32,7 +32,7 @@ It asks for administrator rights because every tweak changes a system setting.
 
 **RGB.** One page for every RGB app on the PC. Pick a colour and Optimiser shows it on SteelSeries GG (MSI laptop keyboards and SteelSeries gear), Razer Synapse (Razer Chroma, plus anything linked with Chroma Connect, like a Wooting keyboard) and Logitech G HUB, using the ways each app offers other programs, and keeps it there while it runs. **Hand back to each app** puts their own lighting back. Apps without a way in (Wootility, Redragon, iCUE, Armoury Crate and others) get a button that opens them.
 
-**Shot Trainer.** Controls the Rocket League shot trainer in `Documents\rl-shot-trainer`: start it, retry or skip a shot, set Necto's skill and reaction time, ball speed, time per shot, countdown and variation, and pick which shots to practise. It writes the trainer's `settings.json`, which the trainer reads before every shot, so changes apply while you play. The trainer starts through `play.bat` (falling back to `start.bat`) as you, not as admin.
+**Shot Trainer.** Controls the Rocket League shot trainer in `Documents\rl-shot-trainer`: start it, retry or skip a shot, set Necto's skill and reaction time, ball speed, time per shot, countdown and variation, and pick which shots to practise. It writes the trainer's `settings.json`, which the trainer reads before every shot, so changes apply while you play. Start training runs the trainer as you, not as admin, through a `play.bat` it writes next to `start.bat` (the same, without the old settings window).
 
 ## Running in the background
 
