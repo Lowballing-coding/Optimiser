@@ -96,6 +96,16 @@ public static class Training
         Save(s);
     }
 
+    public const string WithGameSetting = "TrainWithRocketLeague";
+
+    // Rocket League was opened. RLBot has to start the game itself, so this starts the trainer, which reopens the game
+    // with RLBot attached. While RLBot is running, a Rocket League start is its own, so it's left alone.
+    public static void OnGameStart(string exe)
+    {
+        if (Path.GetFileName(exe).Equals("RocketLeague.exe", StringComparison.OrdinalIgnoreCase)
+            && Settings.Get(WithGameSetting, false) && Installed && !Running) Start();
+    }
+
     // Like the trainer's start.bat, minus its old settings window, which would overwrite this page's changes.
     // Through Explorer so it runs as Peter, not as admin like Optimiser.
     public static void Start()
