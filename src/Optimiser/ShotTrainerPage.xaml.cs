@@ -102,6 +102,8 @@ public partial class ShotTrainerPage : UserControl
     void OnShot(object sender, RoutedEventArgs e) => Change(s =>
         s["shots"] = new JsonArray(ShotList.Children.Cast<DockPanel>().Select(r => (JsonNode?)(((CheckBox)r.Children[0]).IsChecked == true)).ToArray()));
 
+    void OnLaunch(object sender, RoutedEventArgs e) => Training.LaunchGame();
+
     void OnStart(object sender, RoutedEventArgs e)
     {
         if (Training.Running)

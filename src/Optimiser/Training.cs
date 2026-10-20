@@ -106,6 +106,10 @@ public static class Training
             && Settings.Get(WithGameSetting, false) && Installed && !Running) Start();
     }
 
+    // Rocket League on its own, through Epic (namespace:catalog item:app name).
+    public static void LaunchGame() =>
+        Tweaks.OpenAsYou("com.epicgames.launcher://apps/9773aa1aa54f4f7b80e44bef04986cea%3A530145df28a24424923f5828cc9031a1%3ASugar?action=launch&silent=true");
+
     // Like the trainer's start.bat, minus its old settings window, which would overwrite this page's changes.
     // Through Explorer so it runs as Peter, not as admin like Optimiser.
     public static void Start()
