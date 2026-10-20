@@ -10,7 +10,13 @@ namespace Optimiser;
 // shot, so the Shot Trainer page only has to write that file. Keys this page doesn't know are kept as they are.
 public static class Training
 {
-    public static string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "rl-shot-trainer");
+    // OneDrive can move Documents, and the trainer may be in either one: the first that has it, else the current one.
+    public static string Folder = new[]
+    {
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Documents"),
+    }.Select(d => Path.Combine(d, "rl-shot-trainer")).FirstOrDefault(f => File.Exists(Path.Combine(f, "trainer.py")))
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "rl-shot-trainer");
     static string SettingsFile => Path.Combine(Folder, "settings.json");
 
     public static bool Installed => File.Exists(Path.Combine(Folder, "trainer.py"));
