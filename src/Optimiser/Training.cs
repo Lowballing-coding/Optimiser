@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.VisualBasic.FileIO;
 
 namespace Optimiser;
 
@@ -32,10 +33,12 @@ public static class Training
         "9. Cross from the corner", "10. Recovery and shoot",
     ];
 
-    public static JsonObject Load()
+    public static JsonObject Load() => Read(SettingsFile); // missing or half-written: the trainer's defaults apply
+
+    static JsonObject Read(string file)
     {
-        try { return JsonNode.Parse(File.ReadAllText(SettingsFile)) as JsonObject ?? []; }
-        catch { return []; } // missing or half-written: the trainer's defaults apply
+        try { return JsonNode.Parse(File.ReadAllText(file)) as JsonObject ?? []; }
+        catch { return []; }
     }
 
     // Written to a temp file and swapped in, so the trainer never reads half a file. The swap can fail for a moment
@@ -57,7 +60,28 @@ public static class Training
     public static bool Flag(JsonObject s, string key, bool fallback) =>
         s[key] is JsonValue v && v.TryGetValue(out bool b) ? b : fallback;
 
-    // "retry" or "next". The trainer acts when cmd_id changes, so the same command can be sent twice in a row.
+    public static string ClipsFolder => Path.Combine(Folder, "clips");
+
+    // The trainer saves OBS's replay buffer as clips\<time> <shot>.mp4, with a .json beside it naming the shot and result.
+    public static List<ShotClip> Clips()
+    {
+        if (!Directory.Exists(ClipsFolder)) return [];
+        return [.. Directory.GetFiles(ClipsFolder, "*.mp4").Select(file =>
+        {
+            var about = Read(Path.ChangeExtension(file, ".json"));
+            return new ShotClip(file, about["shot"]?.ToString() ?? Path.GetFileNameWithoutExtension(file),
+                            about["result"]?.ToString() ?? "", File.GetLastWriteTime(file));
+        }).OrderByDescending(c => c.Time)];
+    }
+
+    // To the Recycle Bin, so a clip deleted by mistake can be got back.
+    public static void Delete(ShotClip clip)
+    {
+        foreach (var file in new[] { clip.File, Path.ChangeExtension(clip.File, ".json") }.Where(File.Exists))
+            FileSystem.DeleteFile(file, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
+    }
+
+    // "retry", "next" or "save" (a clip). The trainer acts when cmd_id changes, so the same command can be sent twice in a row.
     public static void Send(string command)
     {
         var s = Load();
@@ -74,4 +98,9 @@ public static class Training
         if (!File.Exists(play)) File.WriteAllText(play, "@echo off\r\ncd /d \"%~dp0\"\r\nvenv\\Scripts\\python run.py\r\npause\r\n");
         Tweaks.OpenAsYou(play);
     }
+}
+
+public record ShotClip(string File, string Shot, string Result, DateTime Time)
+{
+    public string Info => Result == "" ? $"{Time:d MMM, HH:mm}" : $"{Result}   {Time:d MMM, HH:mm}";
 }

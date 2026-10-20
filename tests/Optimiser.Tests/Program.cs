@@ -609,6 +609,20 @@ Check(Training.Number(training, "bot_skill", 0) == 80 && Training.Number(trainin
       "shot trainer settings save without losing keys Optimiser doesn't know");
 Check(training["cmd"]!.ToString() == "next" && Training.Number(training, "cmd_id", 0) == 3,
       "each shot trainer command bumps cmd_id, so the trainer acts on it once");
+Check(Training.Clips().Count == 0, "no clips folder: no clips");
+Directory.CreateDirectory(Training.ClipsFolder);
+var older = Path.Combine(Training.ClipsFolder, "older.mp4");
+var newer = Path.Combine(Training.ClipsFolder, "newer.mp4");
+File.WriteAllText(older, "");
+File.SetLastWriteTime(older, DateTime.Now.AddHours(-1));
+File.WriteAllText(newer, "");
+File.WriteAllText(Path.ChangeExtension(newer, ".json"), """{"shot": "6. Wall air dribble", "result": "GOAL!"}""");
+var clips = Training.Clips();
+Check(clips.Count == 2 && clips[0].Shot == "6. Wall air dribble" && clips[0].Result == "GOAL!" && clips[1].Shot == "older",
+      "clips list newest first, named from their .json, or from the file without one");
+Training.Delete(clips[0]);
+Check(!File.Exists(newer) && !File.Exists(Path.ChangeExtension(newer, ".json")) && Training.Clips().Count == 1,
+      "deleting a clip removes its video and its .json");
 
 Directory.Delete(temp, true);
 Registry.CurrentUser.DeleteSubKeyTree(sub);

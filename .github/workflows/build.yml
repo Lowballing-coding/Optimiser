@@ -37,7 +37,7 @@ jobs:
         run: |
           $app = Start-Process out/Optimiser.exe -ArgumentList '--snapshot', "$PWD/snapshots" -Wait -PassThru
           Get-ChildItem snapshots
-          if ($app.ExitCode -ne 0 -or (Get-ChildItem snapshots/*.png).Count -ne 18) { exit 1 }
+          if ($app.ExitCode -ne 0 -or (Get-ChildItem snapshots/*.png).Count -ne 19) { exit 1 }
 
       # Claude can't download Actions artifacts from its sandbox, but it can fetch a git branch.
       - name: Share snapshots on the "snapshots" branch

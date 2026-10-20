@@ -896,6 +896,8 @@ public partial class MainWindow : Window
         ShotTrainer.ShowSample();
         TrainerNav.IsChecked = true;
         await Save("Shot Trainer running");
+        ShotTrainer.ShowClipsSample();
+        await Save("Shot Trainer clips");
         Sidebar.Width = SidebarOpen; // as it looks while hovered
         await Save("Sidebar");
         App.Quit();
