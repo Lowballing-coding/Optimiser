@@ -116,9 +116,11 @@
               <Ellipse x:Name="StateDot" Width="10" Height="10" Margin="0,0,12,0" VerticalAlignment="Center" Fill="{StaticResource Muted}" />
               <TextBlock x:Name="State" VerticalAlignment="Center" TextWrapping="Wrap" />
             </DockPanel>
-            <StackPanel x:Name="Buttons" Orientation="Horizontal" Margin="0,18,0,0">
+            <WrapPanel x:Name="Buttons" Margin="0,18,0,0">
               <Button x:Name="StartButton" Style="{StaticResource AccentButton}" Content="Start training" Click="OnStart"
                       ToolTip="Opens Rocket League with the trainer. If the game is already open, RLBot restarts it." />
+              <Button Style="{StaticResource SecondaryButton}" Content="Launch Rocket League" Margin="10,0,0,0" Click="OnLaunch"
+                      ToolTip="Opens Rocket League through Epic on its own, without the trainer" />
               <Button Style="{StaticResource SecondaryButton}" Content="Retry shot" Margin="10,0,0,0" Click="OnRetry"
                       ToolTip="Same as clicking the right stick in game" />
               <Button Style="{StaticResource SecondaryButton}" Content="Next shot" Margin="10,0,0,0" Click="OnNext"
@@ -126,7 +128,7 @@
               <Button Style="{StaticResource SecondaryButton}" Content="Save clip" Margin="10,0,0,0" Click="OnSave"
                       ToolTip="Saves the last few seconds as a video in Clips. Same as D-pad up in game." />
               <Button Style="{StaticResource SecondaryButton}" Content="Open folder" Margin="10,0,0,0" Click="OnFolder" />
-            </StackPanel>
+            </WrapPanel>
             <TextBlock x:Name="Keys" Style="{StaticResource MutedText}" FontSize="13" Margin="0,14,0,0"
                        Text="In game: click the right stick to retry a shot, D-pad left and right to change shot, D-pad up to save a clip." />
             <Border x:Name="WithGameRow" Height="1" Background="{StaticResource Line}" Margin="0,20,0,16" />
