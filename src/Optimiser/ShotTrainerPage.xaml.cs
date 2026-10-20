@@ -207,7 +207,7 @@ public partial class ShotTrainerPage : UserControl
         (State.Text, StateDot.Fill) = ("Training is running.", Paint("Good"));
         ShowSettings(new JsonObject
         {
-            ["bot_skill"] = 70, ["head_start"] = 0.8, ["countdown"] = 3, ["ball_speed"] = 100, ["shot_time"] = 120, ["variation"] = 20,
+            ["bot_skill"] = 70.0, ["head_start"] = 0.8, ["countdown"] = 3.0, ["ball_speed"] = 100.0, ["shot_time"] = 120.0, ["variation"] = 20.0,
             ["order"] = "Random", ["show_path"] = true, ["infinite_boost"] = true,
             ["shots"] = new JsonArray(true, true, true, true, false, false, false, false, true, true),
         });
