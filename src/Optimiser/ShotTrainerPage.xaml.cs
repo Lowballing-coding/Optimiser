@@ -104,6 +104,21 @@ public partial class ShotTrainerPage : UserControl
 
     void OnLaunch(object sender, RoutedEventArgs e) => Training.LaunchGame();
 
+    void OnMatch(object sender, RoutedEventArgs e)
+    {
+        if (Training.Running)
+        {
+            (State.Text, StateDot.Fill) = ("Training is running. Close Rocket League and the trainer window first.", Paint("Warn"));
+            return;
+        }
+        if (!Training.Match())
+        {
+            (State.Text, StateDot.Fill) = ("Match mode isn't set up in the trainer folder yet.", Paint("Warn"));
+            return;
+        }
+        (State.Text, StateDot.Fill) = ("Starting a 1v1 match against Necto.", Paint("Warn"));
+    }
+
     void OnStart(object sender, RoutedEventArgs e)
     {
         if (Training.Running)

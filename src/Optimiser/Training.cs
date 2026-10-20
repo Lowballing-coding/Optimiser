@@ -110,6 +110,15 @@ public static class Training
     public static void LaunchGame() =>
         Tweaks.OpenAsYou("com.epicgames.launcher://apps/9773aa1aa54f4f7b80e44bef04986cea%3A530145df28a24424923f5828cc9031a1%3ASugar?action=launch&silent=true");
 
+    // A plain 1v1 against Necto (match.bat in the trainer folder). False when the trainer has no match mode.
+    public static bool Match()
+    {
+        var match = Path.Combine(Folder, "match.bat");
+        if (!File.Exists(match)) return false;
+        Tweaks.OpenAsYou(match);
+        return true;
+    }
+
     // Like the trainer's start.bat, minus its old settings window, which would overwrite this page's changes.
     // Through Explorer so it runs as Peter, not as admin like Optimiser.
     public static void Start()
