@@ -273,6 +273,7 @@
             <RadioButton Style="{StaticResource Nav}" Content="&#xE81C;" Tag="Backups" Checked="OnNav" />
             <RadioButton x:Name="RgbNav" Style="{StaticResource Nav}" Content="&#xE790;" Tag="RGB" Checked="OnNav" />
             <RadioButton x:Name="OverclockNav" Style="{StaticResource Nav}" Content="&#xE950;" Tag="Overclock" Checked="OnNav" />
+            <RadioButton x:Name="TrainerNav" Style="{StaticResource Nav}" Content="&#xE768;" Tag="Shot Trainer" Checked="OnNav" />
           </StackPanel>
         </DockPanel>
       </Border>
@@ -573,6 +574,7 @@
       <local:RgbPage x:Name="RGB" Visibility="Collapsed" />
 
       <local:OverclockPage x:Name="Overclock" Visibility="Collapsed" />
+      <local:ShotTrainerPage x:Name="ShotTrainer" Visibility="Collapsed" />
 
       <ScrollViewer x:Name="Settings" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="0,0,14,28">

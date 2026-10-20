@@ -361,6 +361,7 @@ public partial class MainWindow : Window
     {
         var page = (string)((RadioButton)sender).Tag;
         PageTitle.Text = page;
+        page = page.Replace(" ", ""); // the page's x:Name
         foreach (FrameworkElement p in Pages.Children)
         {
             p.Visibility = p.Name == page ? Visibility.Visible : Visibility.Collapsed;
@@ -892,6 +893,9 @@ public partial class MainWindow : Window
         Overclock.ShowSample();
         OverclockNav.IsChecked = true;
         await Save("Overclock testing");
+        ShotTrainer.ShowSample();
+        TrainerNav.IsChecked = true;
+        await Save("Shot Trainer running");
         Sidebar.Width = SidebarOpen; // as it looks while hovered
         await Save("Sidebar");
         App.Quit();
