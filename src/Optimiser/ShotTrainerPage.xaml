@@ -121,6 +121,8 @@
                       ToolTip="Opens Rocket League with the trainer. If the game is already open, RLBot restarts it." />
               <Button Style="{StaticResource SecondaryButton}" Content="Launch Rocket League" Margin="10,0,0,0" Click="OnLaunch"
                       ToolTip="Opens Rocket League through Epic on its own, without the trainer" />
+              <Button Style="{StaticResource SecondaryButton}" Content="Play a match" Margin="10,0,0,0" Click="OnMatch"
+                      ToolTip="A normal 1v1 match against Necto, at the Bot skill below" />
               <Button Style="{StaticResource SecondaryButton}" Content="Retry shot" Margin="10,0,0,0" Click="OnRetry"
                       ToolTip="Same as clicking the right stick in game" />
               <Button Style="{StaticResource SecondaryButton}" Content="Next shot" Margin="10,0,0,0" Click="OnNext"
