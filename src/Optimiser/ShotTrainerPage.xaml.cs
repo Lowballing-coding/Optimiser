@@ -191,7 +191,11 @@ public partial class ShotTrainerPage : UserControl
         ClipList.UpdateLayout(); // so the row exists to be picked
         if (ClipList.ItemContainerGenerator.ContainerFromIndex(index) is ContentPresenter row
             && VisualTreeHelper.GetChildrenCount(row) > 0 && VisualTreeHelper.GetChild(row, 0) is RadioButton first)
+        {
+            autoPicked = true; // shows its first frame; a clip Peter clicks plays straight away
             first.IsChecked = true;
+            autoPicked = false;
+        }
     }
 
     ShotClip? clip;
@@ -200,7 +204,7 @@ public partial class ShotTrainerPage : UserControl
     readonly System.Windows.Threading.DispatcherTimer ticker = new() { Interval = TimeSpan.FromMilliseconds(50) };
     readonly System.Windows.Threading.DispatcherTimer saver = new() { Interval = TimeSpan.FromMilliseconds(400) };
     readonly Stack<ClipEdit> undo = new(), redo = new();
-    bool saving;
+    bool saving, autoPicked;
 
     void OnClip(object sender, RoutedEventArgs e) => Pick((ShotClip)((FrameworkElement)sender).DataContext);
 
@@ -223,8 +227,10 @@ public partial class ShotTrainerPage : UserControl
         undo.Clear();
         redo.Clear();
         Player.Source = new Uri(clip.Source);
-        Player.Play(); // then straight to Pause, which shows the first frame
-        Pause();
+        Player.Play();
+        if (autoPicked) { Pause(); return; } // Pause straight after Play shows the first frame
+        (playing, PlayButton.Content) = (true, "Pause");
+        ticker.Start();
     }
 
     void ShowFavourite() => (FavouriteButton.Content, FavouriteButton.Foreground) =
