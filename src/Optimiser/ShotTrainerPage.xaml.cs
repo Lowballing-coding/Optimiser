@@ -309,6 +309,7 @@ public partial class ShotTrainerPage : UserControl
         seeking = true;
         Seek.Value = Player.Position.TotalSeconds;
         seeking = false;
+        if (EditPanel.IsVisible && Length > 0) Canvas.SetLeft(Playhead, X(Player.Position.TotalSeconds) - 1);
     }
 
     // While the knob is dragged the video is paused and seeks at most every 80 ms: a seek on every pixel of the drag
@@ -365,16 +366,62 @@ public partial class ShotTrainerPage : UserControl
         SeekRange();
     }
 
-    // The slider covers only the cut part, so a trimmed clip looks like its own video; while editing it covers the whole
-    // recording, so a new start or end can be picked anywhere.
+    // The player's slider covers only the cut part, so a trimmed clip looks like its own video. The Edit panel's timeline
+    // shows the whole recording.
     void SeekRange()
     {
-        if (!Player.NaturalDuration.HasTimeSpan) return;
-        var length = Player.NaturalDuration.TimeSpan.TotalSeconds;
-        var (from, to) = EditPanel.IsVisible ? (0.0, length) : Span();
+        ShowTimeline();
+        if (Length == 0) return;
+        var (from, to) = Span();
         seeking = true; // changing the range moves the knob, which isn't a seek
-        (Seek.Minimum, Seek.Maximum) = (from, Math.Max(from + 0.1, Math.Min(to, length)));
+        (Seek.Minimum, Seek.Maximum) = (from, Math.Max(from + 0.1, Math.Min(to, Length)));
         seeking = false;
+    }
+
+    double Length => Player.NaturalDuration.HasTimeSpan ? Player.NaturalDuration.TimeSpan.TotalSeconds : 0;
+    double X(double seconds) => Length == 0 ? 0 : Math.Clamp(seconds / Length, 0, 1) * TimelineCanvas.ActualWidth;
+    double AtMouse() => Math.Clamp(Mouse.GetPosition(TimelineCanvas).X / Math.Max(1, TimelineCanvas.ActualWidth), 0, 1) * Length;
+
+    void ShowTimeline()
+    {
+        var on = clip != null && Length > 0;
+        KeptBand.Visibility = InHandle.Visibility = OutHandle.Visibility = Playhead.Visibility = on ? Visibility.Visible : Visibility.Hidden;
+        if (!on) return;
+        var (from, to) = (clip!.Edit.In, clip.Edit.Out > 0 ? clip.Edit.Out : Length);
+        Canvas.SetLeft(KeptBand, X(from));
+        KeptBand.Width = Math.Max(0, X(to) - X(from));
+        Canvas.SetLeft(InHandle, X(from) - 6);
+        Canvas.SetLeft(OutHandle, X(to) - 6);
+        Canvas.SetLeft(Playhead, X(Player.Position.TotalSeconds) - 1);
+    }
+
+    void OnTimelineSize(object sender, SizeChangedEventArgs e) => ShowTimeline();
+
+    void OnTimelineClick(object sender, MouseButtonEventArgs e)
+    {
+        if (clip == null || Length == 0) return;
+        Player.Position = TimeSpan.FromSeconds(AtMouse());
+        ShowPosition();
+    }
+
+    void OnHandleStart(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e) => Pause();
+
+    // Dragging a handle moves that end of the cut and shows the frame there.
+    void OnHandleDrag(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+    {
+        if (clip == null || Length == 0) return;
+        var t = Math.Round(AtMouse(), 1);
+        var edit = clip.Edit;
+        var end = edit.Out > 0 ? edit.Out : Length;
+        if ((string)((FrameworkElement)sender).Tag == "in") edit = edit with { In = Math.Clamp(t, 0, Math.Max(0, end - 0.5)) };
+        else
+        {
+            t = Math.Clamp(t, edit.In + 0.5, Length);
+            edit = edit with { Out = t >= Length - 0.05 ? 0 : t };
+        }
+        Change(edit, burst: true);
+        Player.Position = TimeSpan.FromSeconds(sender == InHandle ? clip.Edit.In : Math.Min(t, Length - 0.05));
+        ShowPosition();
     }
 
     void OnTrim(object sender, RoutedEventArgs e)

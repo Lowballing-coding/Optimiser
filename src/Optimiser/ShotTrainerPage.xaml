@@ -65,6 +65,20 @@
       <Setter Property="FontSize" Value="12.5" />
       <Setter Property="Margin" Value="0,6,0,22" />
     </Style>
+    <!-- A start or end handle on the Edit panel's timeline -->
+    <Style x:Key="CutHandle" TargetType="Thumb">
+      <Setter Property="Width" Value="12" />
+      <Setter Property="Height" Value="30" />
+      <Setter Property="Canvas.Top" Value="5" />
+      <Setter Property="Cursor" Value="SizeWE" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Thumb">
+            <Border CornerRadius="3" Background="{StaticResource Accent}" BorderBrush="{StaticResource Bg}" BorderThickness="2" />
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
     <!-- One saved clip: picking it loads it into the player -->
     <Style x:Key="ClipRow" TargetType="RadioButton">
       <Setter Property="GroupName" Value="Clips" />
@@ -328,6 +342,19 @@
                 <TextBlock x:Name="TrimText" Style="{StaticResource SliderValue}" />
                 <TextBlock Style="{StaticResource SliderName}" Text="Time" />
               </DockPanel>
+              <!-- The whole recording: the orange band is the part kept, its handles drag the start and end -->
+              <Grid x:Name="Timeline" Height="40" Margin="0,10,0,0" Background="Transparent" Cursor="Hand"
+                    SizeChanged="OnTimelineSize" MouseLeftButtonDown="OnTimelineClick" ToolTip="Click to jump there; drag the handles to cut">
+                <Border Height="8" CornerRadius="4" Background="{StaticResource Line}" VerticalAlignment="Center" Margin="6,0" />
+                <Canvas x:Name="TimelineCanvas" Margin="6,0" ClipToBounds="False">
+                  <Border x:Name="KeptBand" Height="8" CornerRadius="4" Background="{StaticResource Accent}" Opacity="0.6" Canvas.Top="16" />
+                  <Rectangle x:Name="Playhead" Width="2" Height="30" Fill="{StaticResource Text}" Canvas.Top="5" IsHitTestVisible="False" />
+                  <Thumb x:Name="InHandle" Style="{StaticResource CutHandle}" Tag="in" DragStarted="OnHandleStart" DragDelta="OnHandleDrag"
+                         AutomationProperties.Name="Start of the cut" />
+                  <Thumb x:Name="OutHandle" Style="{StaticResource CutHandle}" Tag="out" DragStarted="OnHandleStart" DragDelta="OnHandleDrag"
+                         AutomationProperties.Name="End of the cut" />
+                </Canvas>
+              </Grid>
               <WrapPanel Margin="0,12,0,0">
                 <Button x:Name="ShotTrim" Style="{StaticResource AccentButton}" Content="Cut to the shot" Click="OnTrim" Tag="shot" Margin="0,0,10,8"
                         ToolTip="From just before the shot to just after the goal or your last touch" />
