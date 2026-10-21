@@ -80,7 +80,7 @@ public static class Training
         {
             var about = Read(Path.ChangeExtension(file, ".json"));
             var events = about["events"] as JsonObject;
-            return new ShotClip(file, about["shot"]?.ToString() ?? Path.GetFileNameWithoutExtension(file),
+            return new ShotClip(file, about["name"]?.ToString() ?? about["shot"]?.ToString() ?? Path.GetFileNameWithoutExtension(file),
                             about["result"]?.ToString() ?? "", File.GetLastWriteTime(file))
             {
                 Favourite = Flag(about, "favourite", false),
@@ -113,6 +113,33 @@ public static class Training
             };
         }
         Write(file, about);
+    }
+
+    // Renames the video and everything kept beside it, and shows the name in the list. Characters Windows doesn't allow
+    // in file names are left out of the file name, and a name that's taken gets " (2)".
+    public static ShotClip Rename(ShotClip clip, string name)
+    {
+        name = name.Trim();
+        var safe = string.Concat(name.Where(c => !Path.GetInvalidFileNameChars().Contains(c))).Trim().TrimEnd('.');
+        if (safe == "") throw new ArgumentException("Pick a name with letters or numbers in it");
+        if (System.Text.RegularExpressions.Regex.IsMatch(safe, @"^(CON|PRN|AUX|NUL|COM\d|LPT\d)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            safe += " clip"; // names Windows keeps for devices
+        var folder = Path.GetDirectoryName(clip.File)!;
+        var file = Path.Combine(folder, safe + ".mp4");
+        for (var n = 2; File.Exists(file) && !string.Equals(file, clip.File, StringComparison.OrdinalIgnoreCase); n++)
+            file = Path.Combine(folder, $"{safe} ({n}).mp4");
+        var json = Path.ChangeExtension(clip.File, ".json");
+        var about = Read(json);
+        about["name"] = name;
+        Write(json, about);
+        var renamed = clip with { File = file, Shot = name };
+        if (file == clip.File) return renamed;
+        File.Move(clip.File, file);
+        File.Move(json, Path.ChangeExtension(file, ".json"));
+        if (File.Exists(clip.Original)) File.Move(clip.Original, renamed.Original);
+        var trainers = Path.Combine(folder, "originals", Path.GetFileName(clip.File));
+        if (File.Exists(trainers)) File.Move(trainers, Path.Combine(folder, "originals", Path.GetFileName(file)));
+        return renamed;
     }
 
     // ffmpeg, from the official build in %LOCALAPPDATA%\Programs\ffmpeg, else on PATH.

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace Optimiser;
@@ -341,7 +342,7 @@ public partial class ShotTrainerPage : UserControl
         ShowPosition();
     }
 
-    void OnVideoClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    void OnVideoClick(object sender, MouseButtonEventArgs e)
     {
         if (e.ClickCount == 2) OnFullScreen(sender, e);
         else OnPlay(sender, e);
@@ -466,6 +467,33 @@ public partial class ShotTrainerPage : UserControl
         var at = new ClipWindow(clip, Player.Position, Window.GetWindow(this)).Watch(was);
         Player.Position = at;
         ShowPosition();
+    }
+
+    void OnRename(object sender, RoutedEventArgs e)
+    {
+        if (clip == null || saving) return;
+        (RenameBox.Text, RenameBox.Visibility, ClipName.Visibility) = (clip.Shot, Visibility.Visible, Visibility.Collapsed);
+        RenameBox.Focus();
+        RenameBox.SelectAll();
+    }
+
+    void OnRenameKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape) RenameBox.Text = clip?.Shot ?? "";
+        if (e.Key is Key.Enter or Key.Escape) Keyboard.ClearFocus(); // → OnRenameDone
+    }
+
+    void OnRenameDone(object sender, RoutedEventArgs e)
+    {
+        if (RenameBox.Visibility != Visibility.Visible) return;
+        (RenameBox.Visibility, ClipName.Visibility) = (Visibility.Collapsed, Visibility.Visible);
+        if (clip == null || sample || RenameBox.Text.Trim() == clip.Shot) return;
+        SaveNow();
+        Pause();
+        Player.Source = null; // lets go of the file, so it can be moved
+        try { clip = Training.Rename(clip, RenameBox.Text); }
+        catch (Exception ex) { ClipInfo.Text = $"Couldn't rename the clip: {ex.Message}"; }
+        ShowClips(clip.File);
     }
 
     void OnDelete(object sender, RoutedEventArgs e)
