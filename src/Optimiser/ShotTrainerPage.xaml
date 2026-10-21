@@ -267,6 +267,11 @@
                   <TextBlock Text="Replay goals" VerticalAlignment="Center" />
                 </DockPanel>
                 <DockPanel Margin="0,0,40,12">
+                  <CheckBox x:Name="ReplayAll" DockPanel.Dock="Right" Style="{StaticResource Switch}" Click="OnSwitch" Tag="replay_all"
+                            AutomationProperties.Name="Replay misses and saves" ToolTip="Plays back the last 8 seconds of every shot that isn't a goal" />
+                  <TextBlock Text="Replay misses and saves" VerticalAlignment="Center" />
+                </DockPanel>
+                <DockPanel Margin="0,0,40,12">
                   <CheckBox x:Name="InfiniteBoost" DockPanel.Dock="Right" Style="{StaticResource Switch}" Click="OnSwitch" Tag="infinite_boost"
                             AutomationProperties.Name="Infinite boost" />
                   <TextBlock Text="Infinite boost" VerticalAlignment="Center" />
