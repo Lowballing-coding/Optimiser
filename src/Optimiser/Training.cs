@@ -76,7 +76,9 @@ public static class Training
     public static List<ShotClip> Clips()
     {
         if (!Directory.Exists(ClipsFolder)) return [];
-        return [.. Directory.GetFiles(ClipsFolder, "*.mp4").Select(file =>
+        // Not the files still being written: the trainer's re-encode (.scrub.mp4) and SaveVideo's saving.tmp.mp4.
+        return [.. Directory.GetFiles(ClipsFolder, "*.mp4").Where(f => !f.EndsWith(".scrub.mp4", StringComparison.OrdinalIgnoreCase)
+            && !Path.GetFileName(f).Equals("saving.tmp.mp4", StringComparison.OrdinalIgnoreCase)).Select(file =>
         {
             var about = Read(Path.ChangeExtension(file, ".json"));
             var events = about["events"] as JsonObject;
