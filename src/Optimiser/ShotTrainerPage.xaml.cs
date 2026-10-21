@@ -208,12 +208,15 @@ public partial class ShotTrainerPage : UserControl
         clip = next;
         if (clip == null) { (ClipName.Text, ClipInfo.Text) = ("", ""); return; }
         (ClipName.Text, ClipInfo.Text) = (clip.Shot, clip.Info);
-        FavouriteButton.Content = clip.Favourite ? "\uE735" : "\uE734";
+        ShowFavourite();
         ShowEdit();
         Player.Source = new Uri(clip.File);
         Player.Play(); // then straight to Pause, which shows the first frame
         Pause();
     }
+
+    void ShowFavourite() => (FavouriteButton.Content, FavouriteButton.Foreground) =
+        clip?.Favourite == true ? ("\uE735", Paint("Accent")) : ("\uE734", Paint("Text"));
 
     // Colours are tried once: if the shader didn't compile, the video plays as recorded and the colour controls hide.
     void ShowEdit()
@@ -426,7 +429,7 @@ public partial class ShotTrainerPage : UserControl
         (NoClips.Visibility, ClipView.Visibility) = (Visibility.Collapsed, Visibility.Visible);
         (ClipName.Text, ClipInfo.Text) = (clips[0].Shot, clips[0].Info);
         clip = clips[0];
-        FavouriteButton.Content = "\uE735";
+        ShowFavourite();
         ShowEdit();
         EditPanel.Visibility = Visibility.Visible;
     }
