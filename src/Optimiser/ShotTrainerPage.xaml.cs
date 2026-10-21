@@ -144,6 +144,11 @@ public partial class ShotTrainerPage : UserControl
             : ("Starting Rocket League with the trainer. The first shot comes after the kickoff.", Paint("Warn"));
     }
 
+    void OnLeave(object sender, RoutedEventArgs e) =>
+        (State.Text, StateDot.Fill) = Training.Leave()
+            ? ("Leaving training. Rocket League reopens normally, ready for online play.", Paint("Warn"))
+            : ("Leaving training isn't set up in the trainer folder yet.", Paint("Warn"));
+
     void OnRetry(object sender, RoutedEventArgs e) => Command("retry");
 
     void OnSave(object sender, RoutedEventArgs e) => Command("save");
