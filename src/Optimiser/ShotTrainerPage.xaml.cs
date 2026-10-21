@@ -251,6 +251,7 @@ public partial class ShotTrainerPage : UserControl
         showing = false;
         colour.Set(e);
         Player.Effect = ColourEffect.Shader == null ? null : colour;
+        SeekRange();
         Colours.Visibility = ColourEffect.Shader == null ? Visibility.Collapsed : Visibility.Visible;
         ShotTrim.IsEnabled = clip.Events?.Shot() != null;
         GoalTrim.IsEnabled = clip.Events?.GoalOnly() != null;
@@ -267,7 +268,7 @@ public partial class ShotTrainerPage : UserControl
 
     void OnOpened(object sender, RoutedEventArgs e)
     {
-        if (Player.NaturalDuration.HasTimeSpan) Seek.Maximum = Player.NaturalDuration.TimeSpan.TotalSeconds;
+        SeekRange();
         Player.Position = TimeSpan.FromSeconds(clip?.Edit.In ?? 0);
         ShowPosition();
     }
@@ -358,8 +359,23 @@ public partial class ShotTrainerPage : UserControl
 
     void OnFavouritesOnly(object sender, RoutedEventArgs e) => ShowClips(clip?.File);
 
-    void OnEdit(object sender, RoutedEventArgs e) =>
+    void OnEdit(object sender, RoutedEventArgs e)
+    {
         EditPanel.Visibility = EditPanel.IsVisible ? Visibility.Collapsed : Visibility.Visible;
+        SeekRange();
+    }
+
+    // The slider covers only the cut part, so a trimmed clip looks like its own video; while editing it covers the whole
+    // recording, so a new start or end can be picked anywhere.
+    void SeekRange()
+    {
+        if (!Player.NaturalDuration.HasTimeSpan) return;
+        var length = Player.NaturalDuration.TimeSpan.TotalSeconds;
+        var (from, to) = EditPanel.IsVisible ? (0.0, length) : Span();
+        seeking = true; // changing the range moves the knob, which isn't a seek
+        (Seek.Minimum, Seek.Maximum) = (from, Math.Max(from + 0.1, Math.Min(to, length)));
+        seeking = false;
+    }
 
     void OnTrim(object sender, RoutedEventArgs e)
     {
