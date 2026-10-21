@@ -153,8 +153,29 @@ public static class Training
         if (!Settings.Get(ShiftSetting, false) || !ShiftInstalled) return;
         var open = Process.GetProcessesByName("Shift");
         foreach (var p in open) p.Dispose();
-        if (open.Length == 0) Tweaks.OpenAsYou(ShiftExe);
+        if (open.Length > 0) return;
+        Tweaks.OpenAsYou(ShiftExe);
+        Task.Run(MinimiseShift);
     }
+
+    // Shift has no start-minimised option, so its window is minimised as soon as it appears, without taking focus.
+    static async Task MinimiseShift()
+    {
+        for (var i = 0; i < 60; i++)
+        {
+            await Task.Delay(250);
+            foreach (var p in Process.GetProcessesByName("Shift"))
+                using (p)
+                    if (p.MainWindowHandle != IntPtr.Zero)
+                    {
+                        ShowWindow(p.MainWindowHandle, 7 /* SW_SHOWMINNOACTIVE */);
+                        return;
+                    }
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    static extern bool ShowWindow(IntPtr window, int command);
 
     static void CloseShift()
     {
