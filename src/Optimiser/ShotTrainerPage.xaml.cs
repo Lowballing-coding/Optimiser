@@ -284,9 +284,29 @@ public partial class ShotTrainerPage : UserControl
         seeking = false;
     }
 
+    // While the knob is dragged the video is paused and seeks at most every 80 ms: a seek on every pixel of the drag
+    // queues more frames than the player can decode, and it freezes.
+    bool scrubbing, wasPlaying;
+    DateTime lastSeek;
+
     void OnSeek(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (!seeking) Player.Position = TimeSpan.FromSeconds(e.NewValue);
+        if (seeking || scrubbing && DateTime.Now - lastSeek < TimeSpan.FromMilliseconds(80)) return;
+        lastSeek = DateTime.Now;
+        Player.Position = TimeSpan.FromSeconds(e.NewValue);
+    }
+
+    void OnScrubStart(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e)
+    {
+        (scrubbing, wasPlaying) = (true, playing);
+        Pause();
+    }
+
+    void OnScrubEnd(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        scrubbing = false;
+        Player.Position = TimeSpan.FromSeconds(Seek.Value); // where the knob was let go
+        if (wasPlaying) OnPlay(sender, e);
     }
 
     void OnEnded(object sender, RoutedEventArgs e)
