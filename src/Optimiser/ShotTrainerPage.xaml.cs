@@ -47,6 +47,9 @@ public partial class ShotTrainerPage : UserControl
                                     : Training.GameUpdating() ? ($"{Training.UpdatingNote} Training can start once it's done.", Paint("Warn"))
                                     : ("Not running. Start it here or from the RL Trainer shortcut.", Paint("Muted"));
         WithGame.IsChecked = Settings.Get(Training.WithGameSetting, false);
+        WithShift.IsChecked = Settings.Get(Training.ShiftSetting, false);
+        WithShift.IsEnabled = Training.ShiftInstalled;
+        if (!Training.ShiftInstalled) ShiftNote.Text = $"Shift isn't installed in {Path.GetDirectoryName(Training.ShiftExe)}.";
         ShowSettings(Training.Load());
         if (ClipsTab.IsVisible) ShowClips();
     }
@@ -92,6 +95,8 @@ public partial class ShotTrainerPage : UserControl
     }
 
     void OnWithGame(object sender, RoutedEventArgs e) => Settings.Set(Training.WithGameSetting, WithGame.IsChecked == true);
+
+    void OnWithShift(object sender, RoutedEventArgs e) => Settings.Set(Training.ShiftSetting, WithShift.IsChecked == true);
 
     void OnSwitch(object sender, RoutedEventArgs e)
     {

@@ -40,11 +40,17 @@ public sealed class GameWatcher : IDisposable
         starts.EventArrived += (_, e) =>
         {
             var pid = (uint)e.NewEvent["ProcessID"];
-            try { if (ExePath(pid) is { } exe) Training.OnGameStart(exe); }
+            try { if (ExePath(pid) is { } exe) Training.OnGameStart(pid, exe); }
             catch { } // only a convenience: the game still opens without the trainer
             OnStart(pid);
         };
-        stops.EventArrived += (_, e) => OnStop((uint)e.NewEvent["ProcessID"]);
+        stops.EventArrived += (_, e) =>
+        {
+            var pid = (uint)e.NewEvent["ProcessID"];
+            try { Training.OnGameStop(pid); }
+            catch { } // only a convenience, like the start
+            OnStop(pid);
+        };
         mode = SavedMode;
         starts.Start();
         stops.Start();
