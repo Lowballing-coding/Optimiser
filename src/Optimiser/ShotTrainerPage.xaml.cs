@@ -15,18 +15,7 @@ public partial class ShotTrainerPage : UserControl
     public ShotTrainerPage()
     {
         InitializeComponent();
-        for (var i = 0; i < Training.Shots.Length; i++)
-        {
-            var name = Training.Shots[i];
-            var row = new DockPanel { Margin = new Thickness(0, 0, i % 2 == 0 ? 40 : 0, 12) };
-            var box = new CheckBox { Style = (Style)FindResource("Switch"), Tag = i };
-            box.Click += OnShot;
-            AutomationProperties.SetName(box, name);
-            DockPanel.SetDock(box, Dock.Right);
-            row.Children.Add(box);
-            row.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center });
-            ShotList.Children.Add(row);
-        }
+        ShowShots(Training.BuiltInShots);
         ticker.Tick += (_, _) => OnTick();
         saver.Tick += (_, _) => SaveNow();
         IsVisibleChanged += (_, _) =>
@@ -34,6 +23,24 @@ public partial class ShotTrainerPage : UserControl
             if (!IsVisible) LetGo();
             else if (!sample) Show();
         };
+    }
+
+    // One switch per shot. The list follows the trainer's (custom shots included), so it's rebuilt when that changes.
+    void ShowShots(string[] names)
+    {
+        if (ShotList.Children.Cast<DockPanel>().Select(r => ((TextBlock)r.Children[1]).Text).SequenceEqual(names)) return;
+        ShotList.Children.Clear();
+        for (var i = 0; i < names.Length; i++)
+        {
+            var row = new DockPanel { Margin = new Thickness(0, 0, i % 2 == 0 ? 40 : 0, 12) };
+            var box = new CheckBox { Style = (Style)FindResource("Switch"), Tag = i };
+            box.Click += OnShot;
+            AutomationProperties.SetName(box, names[i]);
+            DockPanel.SetDock(box, Dock.Right);
+            row.Children.Add(box);
+            row.Children.Add(new TextBlock { Text = names[i], VerticalAlignment = VerticalAlignment.Center });
+            ShotList.Children.Add(row);
+        }
     }
 
     // Re-read each time the page opens: the trainer's own window may have changed the file.
@@ -53,8 +60,10 @@ public partial class ShotTrainerPage : UserControl
         WithShift.IsChecked = Settings.Get(Training.ShiftSetting, false);
         WithShift.IsEnabled = Training.ShiftInstalled;
         if (!Training.ShiftInstalled) ShiftNote.Text = $"Shift isn't installed in {Path.GetDirectoryName(Training.ShiftExe)}.";
+        ShowShots(Training.Shots);
         ShowSettings(Training.Load());
         if (ClipsTab.IsVisible) ShowClips();
+        if (StatsTab.IsVisible) ShowStats();
     }
 
     // The fallbacks are the trainer's own defaults (DEFAULTS in sliders.py).
@@ -72,6 +81,7 @@ public partial class ShotTrainerPage : UserControl
         ShowPath.IsChecked = Training.Flag(s, "show_path", true);
         Replay.IsChecked = Training.Flag(s, "replay", true);
         InfiniteBoost.IsChecked = Training.Flag(s, "infinite_boost", false);
+        AutoDifficulty.IsChecked = Training.Flag(s, "auto_difficulty", false);
         var shots = s["shots"] as JsonArray;
         foreach (DockPanel row in ShotList.Children)
         {
@@ -169,12 +179,46 @@ public partial class ShotTrainerPage : UserControl
 
     void OnTab(object sender, RoutedEventArgs e)
     {
-        if (ClipsTab == null) return; // the first tab is checked while the page loads
-        var clips = sender == ClipsTabButton;
-        TrainingTab.Visibility = clips ? Visibility.Collapsed : Visibility.Visible;
-        ClipsTab.Visibility = clips ? Visibility.Visible : Visibility.Collapsed;
-        if (clips) ShowClips();
+        if (StatsTab == null) return; // the first tab is checked while the page loads
+        var tab = sender == ClipsTabButton ? ClipsTab : sender == StatsTabButton ? StatsTab : TrainingTab;
+        foreach (var t in new[] { TrainingTab, ClipsTab, StatsTab }) t.Visibility = t == tab ? Visibility.Visible : Visibility.Collapsed;
+        if (tab == ClipsTab) ShowClips();
         else LetGo();
+        if (tab == StatsTab && !sample) ShowStats();
+    }
+
+    void ShowStats()
+    {
+        var all = Training.Attempts();
+        ShowStats(all, Training.PerShot(all, Training.Shots), Training.LastSession(all));
+    }
+
+    void ShowStats(List<Attempt> all, List<ShotStat> stats, (List<Attempt> Attempts, int Clips)? last)
+    {
+        (NoStats.Visibility, StatsView.Visibility) = all.Count == 0 ? (Visibility.Visible, Visibility.Collapsed) : (Visibility.Collapsed, Visibility.Visible);
+        ShotStats.ItemsSource = stats;
+        if (last is not { } session) return;
+        var (tries, clips) = session;
+        var made = tries.Count(a => a.Ok);
+        SessionText.Text = $"{made} of {tries.Count} made   {(double)made / tries.Count:P0}";
+        var mine = Training.PerShot(tries, Training.Shots).Where(s => s.Tries > 0).ToList();
+        var best = mine.OrderByDescending(s => s.Rate).ThenByDescending(s => s.Tries).FirstOrDefault();
+        var worst = mine.OrderBy(s => s.Rate).ThenByDescending(s => s.Tries).FirstOrDefault();
+        SessionDetail.Text = $"{tries[0].Time:d MMM, HH:mm}   ·   Best streak {Training.BestStreak(tries)}   ·   {clips} clip{(clips == 1 ? "" : "s")}"
+            + (best == null ? "" : $"   ·   Best: {best.Shot} ({best.Made}/{best.Tries})")
+            + (worst == null || worst == best ? "" : $"   ·   Toughest: {worst.Shot} ({worst.Made}/{worst.Tries})");
+    }
+
+    // Ticks only the shots that need work, and starts the trainer (or the running one picks them up at the next shot).
+    void OnTrainWeak(object sender, RoutedEventArgs e)
+    {
+        if (sample) return;
+        var stats = Training.PerShot(Training.Attempts(), Training.Shots);
+        var weak = Training.Weakest(stats, 3);
+        Change(s => s["shots"] = new JsonArray(stats.Select((_, i) => (JsonNode?)weak.Contains(i)).ToArray()));
+        ShowSettings(Training.Load());
+        StatsNote.Text = $"Training {string.Join(", ", weak.Select(i => stats[i].Shot))}.";
+        if (!Training.Running) OnStart(sender, e);
     }
 
     void ShowClips(string? pick = null)
@@ -577,6 +621,18 @@ public partial class ShotTrainerPage : UserControl
     }
 
     Brush Paint(string name) => (Brush)FindResource(name);
+
+    // The Stats tab with a made-up history.
+    public void ShowStatsSample()
+    {
+        sample = true;
+        StatsTabButton.IsChecked = true;
+        var at = new DateTime(2026, 10, 21, 20, 10, 0);
+        var shots = Training.BuiltInShots;
+        List<Attempt> all = [.. Enumerable.Range(0, 60).Select(i => new Attempt(at.AddMinutes(i / 3.0), i < 30 ? "a" : "b", shots[i * 7 % shots.Length], i % 5 != i % 3))];
+        var last = all.Where(a => a.Session == "b").ToList();
+        ShowStats(all, Training.PerShot(all, shots), (last, 3));
+    }
 
     // For the CI snapshot, which has no trainer installed: the page mid-session.
     public void ShowSample()

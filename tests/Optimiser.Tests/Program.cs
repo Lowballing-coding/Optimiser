@@ -678,6 +678,24 @@ Training.Delete(clips[0]);
 Check(!File.Exists(newer) && !File.Exists(Path.ChangeExtension(newer, ".json")) && Training.Clips().Count == 1,
       "deleting a clip removes its video and its .json");
 
+Check(Training.Shots.SequenceEqual(Training.BuiltInShots) && Training.Attempts().Count == 0 && Training.LastSession([]) == null,
+      "without the trainer's shots.json and stats.jsonl: the built-in shots and no stats");
+File.WriteAllText(Path.Combine(Training.Folder, "shots.json"), """["A", "B", "C", "16. Custom shot 1"]""");
+Check(Training.Shots.SequenceEqual(["A", "B", "C", "16. Custom shot 1"]), "the shot list follows the trainer's, custom shots included");
+string Line(string shot, bool ok, string session = "s1", int min = 0) =>
+    $$"""{"time": "2026-10-21T20:{{min:00}}:00", "session": "{{session}}", "shot": "{{shot}}", "result": "x", "ok": {{(ok ? "true" : "false")}}}""";
+File.WriteAllLines(Path.Combine(Training.Folder, "stats.jsonl"),
+    [Line("A", true), Line("A", true), Line("A", false), Line("B", false, min: 1), "{broken", Line("B", false, "s2", 2), Line("B", true, "s2", 3),
+     Line("B", false, "s2", 4), Line("A", true, "s2", 5), Line("A", true, "s2", 6)]);
+var attempts = Training.Attempts();
+var perShot = Training.PerShot(attempts, Training.Shots);
+Check(attempts.Count == 9 && perShot[0] is { Tries: 5, Made: 4, Weakest: false } && perShot[1] is { Tries: 4, Made: 1, Weakest: true }
+      && perShot[2].Tries == 0, "stats per shot, skipping a broken line; the weakest has the lowest rate of the shots tried 3+ times");
+Check(Training.Weakest(perShot, 3).SequenceEqual([1, 0, 2]) && Training.Weakest(perShot, 1).SequenceEqual([1]),
+      "weakest shots: lowest rate first, then the least tried");
+Check(Training.BestStreak(attempts) == 2 && Training.LastSession(attempts) is { Attempts.Count: 5 } last && last.Attempts[0].Time.Minute == 2,
+      "best streak, and the last session is the latest run's attempts");
+
 Directory.Delete(temp, true);
 Registry.CurrentUser.DeleteSubKeyTree(sub);
 Console.WriteLine("All checks passed");

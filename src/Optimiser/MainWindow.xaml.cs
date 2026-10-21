@@ -76,6 +76,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         ((RadioButton)Nav.Children[0]).IsChecked = true;
+        KeysTip.Text = $"Tip: Ctrl+1 to Ctrl+{Math.Min(9, NavButtons.Length)} jump straight to each page. "; // follows the pages
         StateChanged += (_, _) => ShowState();
         RestorePlacement();
         SourceInitialized += (_, _) =>
@@ -898,6 +899,8 @@ public partial class MainWindow : Window
         await Save("Shot Trainer running");
         ShotTrainer.ShowClipsSample();
         await Save("Shot Trainer clips");
+        ShotTrainer.ShowStatsSample();
+        await Save("Shot Trainer stats");
         Sidebar.Width = SidebarOpen; // as it looks while hovered
         await Save("Sidebar");
         App.Quit();
