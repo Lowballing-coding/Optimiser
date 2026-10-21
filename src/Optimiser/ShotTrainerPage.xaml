@@ -275,12 +275,13 @@
           <Border Style="{StaticResource Panel}">
             <StackPanel>
               <Border Background="Black" CornerRadius="6" Height="340">
-                <MediaElement x:Name="Player" LoadedBehavior="Manual" UnloadedBehavior="Close" Stretch="Uniform"
+                <MediaElement x:Name="Player" LoadedBehavior="Manual" UnloadedBehavior="Close" Stretch="Uniform" ScrubbingEnabled="True"
                               MediaOpened="OnOpened" MediaEnded="OnEnded" MouseLeftButtonDown="OnVideoClick" Cursor="Hand"
                               ToolTip="Double-click for full screen" />
               </Border>
               <Slider x:Name="Seek" Style="{StaticResource Range}" IsSnapToTickEnabled="False" Minimum="0" Maximum="1"
-                      AutomationProperties.Name="Position in the clip" ValueChanged="OnSeek" />
+                      AutomationProperties.Name="Position in the clip" ValueChanged="OnSeek"
+                      Thumb.DragStarted="OnScrubStart" Thumb.DragCompleted="OnScrubEnd" />
               <DockPanel Margin="0,12,0,0">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                   <Button x:Name="FavouriteButton" Style="{StaticResource SecondaryButton}" FontFamily="{StaticResource Icons}" Content="&#xE734;"
