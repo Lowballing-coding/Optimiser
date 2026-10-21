@@ -6,7 +6,7 @@ using System.Windows.Threading;
 
 namespace Optimiser;
 
-// A clip filling the screen, with its trim and colours. Space plays and pauses, the arrows skip 5 s, and Esc, F or a
+// A clip filling the screen, with its trim and colours, looping until paused. Space plays and pauses, the arrows skip 5 s, and Esc, F or a
 // double-click goes back.
 public class ClipWindow : Window
 {
@@ -76,12 +76,11 @@ public class ClipWindow : Window
         ShowHint();
     }
 
+    // Loops until paused, like the page's player.
     void Rewind()
     {
-        (playing, player.Position) = (false, TimeSpan.FromSeconds(clip.Edit.In));
-        player.Pause();
-        ticker.Stop();
-        ShowHint();
+        player.Position = TimeSpan.FromSeconds(clip.Edit.In);
+        if (playing) player.Play();
     }
 
     void ShowHint()

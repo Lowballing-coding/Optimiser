@@ -275,7 +275,7 @@ public partial class ShotTrainerPage : UserControl
         Player.Source = new Uri(clip.Source);
         Player.Play();
         if (autoPicked) { Pause(); return; } // Pause straight after Play shows the first frame
-        (playing, PlayButton.Content) = (true, "Pause");
+        (playing, PlayButton.Content) = (true, "\uE769"); // the pause icon
         ticker.Start();
     }
 
@@ -325,14 +325,14 @@ public partial class ShotTrainerPage : UserControl
         var (from, to) = Span();
         if (Player.Position.TotalSeconds < from || Player.Position.TotalSeconds >= to - 0.05) Player.Position = TimeSpan.FromSeconds(from);
         Player.Play();
-        (playing, PlayButton.Content) = (true, "Pause");
+        (playing, PlayButton.Content) = (true, "\uE769"); // the pause icon
         ticker.Start();
     }
 
     void Pause()
     {
         Player.Pause();
-        (playing, PlayButton.Content) = (false, "Play");
+        (playing, PlayButton.Content) = (false, "\uE768"); // the play icon
         ticker.Stop();
     }
 
@@ -382,10 +382,11 @@ public partial class ShotTrainerPage : UserControl
         if (wasPlaying) OnPlay(sender, e);
     }
 
+    // Clips loop until paused.
     void OnEnded(object sender, RoutedEventArgs e)
     {
-        Pause();
         Player.Position = TimeSpan.FromSeconds(clip?.Edit.In ?? 0);
+        if (playing) Player.Play();
         ShowPosition();
     }
 
