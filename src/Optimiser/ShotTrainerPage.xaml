@@ -134,15 +134,26 @@
             <TextBlock x:Name="Keys" Style="{StaticResource MutedText}" FontSize="13" Margin="0,14,0,0"
                        Text="In game: click the right stick to retry a shot, D-pad left and right to change shot, D-pad up to save a clip." />
             <Border x:Name="WithGameRow" Height="1" Background="{StaticResource Line}" Margin="0,20,0,16" />
-            <DockPanel x:Name="WithGamePanel">
-              <CheckBox x:Name="WithGame" DockPanel.Dock="Right" Style="{StaticResource Switch}" Margin="24,0,0,0" Click="OnWithGame"
-                        AutomationProperties.Name="Start with Rocket League" />
-              <StackPanel>
-                <TextBlock Text="Start with Rocket League" FontWeight="SemiBold" />
-                <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="0,4,0,0" MaxWidth="720" HorizontalAlignment="Left"
-                           Text="When you open Rocket League, the trainer starts too. RLBot reopens the game once to join it. Needs Optimiser running in the background." />
-              </StackPanel>
-            </DockPanel>
+            <StackPanel x:Name="WithGamePanel">
+              <DockPanel>
+                <CheckBox x:Name="WithGame" DockPanel.Dock="Right" Style="{StaticResource Switch}" Margin="24,0,0,0" Click="OnWithGame"
+                          AutomationProperties.Name="Start with Rocket League" />
+                <StackPanel>
+                  <TextBlock Text="Start with Rocket League" FontWeight="SemiBold" />
+                  <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="0,4,0,0" MaxWidth="720" HorizontalAlignment="Left"
+                             Text="When you open Rocket League, the trainer starts too. RLBot reopens the game once to join it. Needs Optimiser running in the background." />
+                </StackPanel>
+              </DockPanel>
+              <DockPanel Margin="0,16,0,0">
+                <CheckBox x:Name="WithShift" DockPanel.Dock="Right" Style="{StaticResource Switch}" Margin="24,0,0,0" Click="OnWithShift"
+                          AutomationProperties.Name="Open Shift with Rocket League" />
+                <StackPanel>
+                  <TextBlock Text="Open Shift with Rocket League" FontWeight="SemiBold" />
+                  <TextBlock x:Name="ShiftNote" Style="{StaticResource MutedText}" FontSize="13" Margin="0,4,0,0" MaxWidth="720" HorizontalAlignment="Left"
+                             Text="Shift opens when Rocket League starts (before it, from the buttons here) and closes when the game closes. Needs Optimiser running in the background." />
+                </StackPanel>
+              </DockPanel>
+            </StackPanel>
           </StackPanel>
         </Border>
 

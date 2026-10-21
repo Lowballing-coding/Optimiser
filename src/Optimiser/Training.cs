@@ -100,10 +100,53 @@ public static class Training
 
     // Rocket League was opened. RLBot has to start the game itself, so this starts the trainer, which reopens the game
     // with RLBot attached. While RLBot is running, a Rocket League start is its own, so it's left alone.
-    public static void OnGameStart(string exe)
+    public static void OnGameStart(uint pid, string exe)
     {
-        if (Path.GetFileName(exe).Equals("RocketLeague.exe", StringComparison.OrdinalIgnoreCase)
-            && Settings.Get(WithGameSetting, false) && Installed && !Running) Start();
+        if (!Path.GetFileName(exe).Equals("RocketLeague.exe", StringComparison.OrdinalIgnoreCase)) return;
+        lock (games) games.Add(pid);
+        OpenShift();
+        if (Settings.Get(WithGameSetting, false) && Installed && !Running) Start();
+    }
+
+    static readonly HashSet<uint> games = []; // Rocket League processes seen starting
+
+    // The last Rocket League closed. RLBot closes and reopens the game when training starts, so Shift only closes if
+    // the game is still gone a little later.
+    public static void OnGameStop(uint pid)
+    {
+        lock (games) if (!games.Remove(pid) || games.Count > 0) return;
+        Task.Delay(TimeSpan.FromSeconds(20)).ContinueWith(_ =>
+        {
+            lock (games) if (games.Count > 0) return;
+            CloseShift();
+        });
+    }
+
+    public const string ShiftSetting = "ShiftWithRocketLeague";
+    public static string ShiftExe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Shift", "Shift.exe");
+    public static bool ShiftInstalled => File.Exists(ShiftExe);
+
+    // Shift swaps map files as the game loads them, so the buttons here open it before Rocket League.
+    static void OpenShift()
+    {
+        if (!Settings.Get(ShiftSetting, false) || !ShiftInstalled) return;
+        var open = Process.GetProcessesByName("Shift");
+        foreach (var p in open) p.Dispose();
+        if (open.Length == 0) Tweaks.OpenAsYou(ShiftExe);
+    }
+
+    static void CloseShift()
+    {
+        if (!Settings.Get(ShiftSetting, false)) return;
+        foreach (var p in Process.GetProcessesByName("Shift"))
+            using (p)
+            {
+                try
+                {
+                    if (!p.CloseMainWindow() || !p.WaitForExit(5000)) p.Kill();
+                }
+                catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { } // already gone
+            }
     }
 
     public static string EpicManifests = Path.Combine(
@@ -128,14 +171,18 @@ public static class Training
     public const string UpdatingNote = "Rocket League is updating in the Epic Games Launcher.";
 
     // Rocket League on its own, through Epic (namespace:catalog item:app name).
-    public static void LaunchGame() =>
+    public static void LaunchGame()
+    {
+        OpenShift();
         Tweaks.OpenAsYou("com.epicgames.launcher://apps/9773aa1aa54f4f7b80e44bef04986cea%3A530145df28a24424923f5828cc9031a1%3ASugar?action=launch&silent=true");
+    }
 
     // A plain 1v1 against Necto (match.bat in the trainer folder). False when the trainer has no match mode.
     public static bool Match()
     {
         var match = Path.Combine(Folder, "match.bat");
         if (!File.Exists(match)) return false;
+        OpenShift();
         Tweaks.OpenAsYou(match);
         return true;
     }
@@ -146,6 +193,7 @@ public static class Training
     {
         var play = Path.Combine(Folder, "play.bat");
         if (!File.Exists(play)) File.WriteAllText(play, "@echo off\r\ncd /d \"%~dp0\"\r\nvenv\\Scripts\\python run.py\r\npause\r\n");
+        OpenShift();
         Tweaks.OpenAsYou(play);
     }
 }
