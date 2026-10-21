@@ -37,7 +37,7 @@ public class ClipWindow : Window
             colour.Set(clip.Edit);
             player.Effect = colour;
         }
-        player.Source = new Uri(clip.File);
+        player.Source = new Uri(clip.Source);
         player.MediaOpened += (_, _) => player.Position = start;
         player.MediaEnded += (_, _) => Rewind();
         Content = new Grid { Children = { player, hint } };

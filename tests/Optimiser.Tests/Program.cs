@@ -647,6 +647,21 @@ Check(clips[0].Events is { Goal: 14, ShotStart: null, Touches.Length: 3 } ev && 
 Check(new ClipEvents(20, [3, 18.5], null, 1.5).Shot() == (0.5, 20) && new ClipEvents(20, [], null, null).Shot() == null
       && new ClipEvents(20, [], null, null).GoalOnly() == null,
       "without a goal the cut ends 3 s after the last touch, never past the end; without events there's no cut");
+var cut = Training.EditArgs("in.mp4", ClipEdit.None with { In = 4.5, Out = 16 }, "out.mp4");
+Check(string.Join(" ", cut).Contains("-ss 4.5 -i in.mp4 -t 11.5") && !cut.Contains("-vf") && cut[^1] == "out.mp4",
+      "a trim only cuts, from the start time for its length");
+var look = Training.EditArgs("in.mp4", ClipEdit.None with { Contrast = 1.25, Warmth = 0.125 }, "out.mp4");
+Check(!look.Contains("-ss") && !look.Contains("-t") && look[look.IndexOf("-vf") + 1].StartsWith("eq=brightness=0:contrast=1.25:saturation=1,lutrgb=r='clipval+31.875'")
+      && look[look.IndexOf("-vf") + 1].Contains("b='clipval+-31.875'"), "colours go through eq and lutrgb, written with dots whatever the language");
+var edited = clips[1] with { };
+Directory.CreateDirectory(Path.GetDirectoryName(edited.Original)!);
+File.WriteAllText(edited.Original, "recording");
+File.WriteAllText(edited.File, "edited");
+Check(edited.Source == edited.Original, "once edited, the editor plays the kept recording");
+edited.Edit = ClipEdit.None;
+Training.SaveVideo(edited).Wait();
+Check(File.ReadAllText(edited.File) == "recording" && !File.Exists(edited.Original) && Training.Clips().Single(c => c.File == edited.File).Saved == ClipEdit.None,
+      "saving with no edit puts the recording back");
 Check(ColourEffect.Shader != null, "the clip colour shader compiles with Windows' d3dcompiler_47.dll");
 Training.Delete(clips[0]);
 Check(!File.Exists(newer) && !File.Exists(Path.ChangeExtension(newer, ".json")) && Training.Clips().Count == 1,

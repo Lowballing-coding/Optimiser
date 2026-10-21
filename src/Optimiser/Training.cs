@@ -80,13 +80,12 @@ public static class Training
         {
             var about = Read(Path.ChangeExtension(file, ".json"));
             var events = about["events"] as JsonObject;
-            var edit = about["edit"] as JsonObject ?? [];
             return new ShotClip(file, about["shot"]?.ToString() ?? Path.GetFileNameWithoutExtension(file),
                             about["result"]?.ToString() ?? "", File.GetLastWriteTime(file))
             {
                 Favourite = Flag(about, "favourite", false),
-                Edit = new ClipEdit(Number(edit, "in", 0), Number(edit, "out", 0), Number(edit, "brightness", 0),
-                                    Number(edit, "contrast", 1), Number(edit, "saturation", 1), Number(edit, "warmth", 0)),
+                Edit = ReadEdit(about["edit"] as JsonObject ?? []),
+                Saved = ReadEdit(about["saved_edit"] as JsonObject ?? []),
                 Events = events == null ? null : new ClipEvents(Number(events, "length", 20),
                     [.. (events["touches"] as JsonArray ?? []).Select(t => t is JsonValue v && v.TryGetValue(out double d) ? d : -1).Where(t => t >= 0)],
                     events["goal"] is JsonValue g && g.TryGetValue(out double goal) ? (double?)goal : null,
@@ -95,26 +94,90 @@ public static class Training
         }).OrderByDescending(c => c.Time)];
     }
 
+    static ClipEdit ReadEdit(JsonObject e) => new(Number(e, "in", 0), Number(e, "out", 0), Number(e, "brightness", 0),
+        Number(e, "contrast", 1), Number(e, "saturation", 1), Number(e, "warmth", 0));
+
     // Into the clip's .json, keeping what the trainer wrote. Makes one if an old clip has none.
     public static void SaveEdits(ShotClip clip)
     {
         var file = Path.ChangeExtension(clip.File, ".json");
         var about = Read(file);
         about["favourite"] = clip.Favourite;
-        var e = clip.Edit;
-        if (e == ClipEdit.None) about.Remove("edit");
-        else about["edit"] = new JsonObject
+        foreach (var (key, e) in new[] { ("edit", clip.Edit), ("saved_edit", clip.Saved) })
         {
-            ["in"] = e.In, ["out"] = e.Out, ["brightness"] = e.Brightness, ["contrast"] = e.Contrast,
-            ["saturation"] = e.Saturation, ["warmth"] = e.Warmth,
-        };
+            if (e == ClipEdit.None) about.Remove(key);
+            else about[key] = new JsonObject
+            {
+                ["in"] = e.In, ["out"] = e.Out, ["brightness"] = e.Brightness, ["contrast"] = e.Contrast,
+                ["saturation"] = e.Saturation, ["warmth"] = e.Warmth,
+            };
+        }
         Write(file, about);
+    }
+
+    // ffmpeg, from the official build in %LOCALAPPDATA%\Programs\ffmpeg, else on PATH.
+    public static string? Ffmpeg = new[] { Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "ffmpeg", "bin", "ffmpeg.exe") }
+        .Concat((Environment.GetEnvironmentVariable("PATH") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries).Select(d => Path.Combine(d.Trim(), "ffmpeg.exe")))
+        .FirstOrDefault(File.Exists);
+
+    // The same look as ColourEffect's shader, through ffmpeg: eq for brightness, contrast and saturation, then warmth.
+    public static List<string> EditArgs(string source, ClipEdit e, string output)
+    {
+        var f = System.Globalization.CultureInfo.InvariantCulture;
+        List<string> args = ["-y", "-hide_banner", "-loglevel", "error"];
+        if (e.In > 0) args.AddRange(["-ss", e.In.ToString(f)]);
+        args.AddRange(["-i", source]);
+        if (e.Out > e.In) args.AddRange(["-t", (e.Out - e.In).ToString(f)]);
+        if (e with { In = 0, Out = 0 } != ClipEdit.None)
+        {
+            var w = e.Warmth * 255;
+            args.AddRange(["-vf", string.Format(f,
+                "eq=brightness={0}:contrast={1}:saturation={2},lutrgb=r='clipval+{3}':g='clipval+{4}':b='clipval+{5}',format=yuv420p",
+                e.Brightness, e.Contrast, e.Saturation, w, w * 0.3, -w)]);
+        }
+        args.AddRange(["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", "-g", "15", "-bf", "0", // a keyframe every 0.25 s, to scrub smoothly
+                       "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", output]);
+        return args;
+    }
+
+    // Writes the edit into the clip's video. The first save keeps the recording in clips\unedited, every save works from
+    // that, and saving no edit puts the recording back.
+    public static async Task SaveVideo(ShotClip clip)
+    {
+        if (clip.Edit == ClipEdit.None)
+        {
+            if (File.Exists(clip.Original)) File.Move(clip.Original, clip.File, true);
+        }
+        else
+        {
+            if (Ffmpeg == null) throw new InvalidOperationException("ffmpeg isn't installed");
+            if (!File.Exists(clip.Original))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(clip.Original)!);
+                File.Move(clip.File, clip.Original);
+            }
+            var temp = Path.Combine(Path.GetDirectoryName(clip.File)!, "saving.tmp.mp4");
+            var start = new ProcessStartInfo(Ffmpeg) { CreateNoWindow = true, UseShellExecute = false, RedirectStandardError = true };
+            foreach (var a in EditArgs(clip.Original, clip.Edit, temp)) start.ArgumentList.Add(a);
+            using var ffmpeg = Process.Start(start)!;
+            var errors = ffmpeg.StandardError.ReadToEndAsync();
+            await ffmpeg.WaitForExitAsync();
+            if (ffmpeg.ExitCode != 0)
+            {
+                File.Delete(temp);
+                throw new InvalidOperationException((await errors).Trim() is { Length: > 0 } e ? e.Split('\n')[^1] : $"ffmpeg exit {ffmpeg.ExitCode}");
+            }
+            File.Move(temp, clip.File, true);
+        }
+        clip.Saved = clip.Edit;
+        SaveEdits(clip);
     }
 
     // To the Recycle Bin, so a clip deleted by mistake can be got back.
     public static void Delete(ShotClip clip)
     {
-        foreach (var file in new[] { clip.File, Path.ChangeExtension(clip.File, ".json") }.Where(File.Exists))
+        foreach (var file in new[] { clip.File, Path.ChangeExtension(clip.File, ".json"), clip.Original,
+                                   Path.Combine(ClipsFolder, "originals", Path.GetFileName(clip.File)) }.Where(File.Exists))
             FileSystem.DeleteFile(file, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
     }
 
@@ -277,6 +340,10 @@ public record ShotClip(string File, string Shot, string Result, DateTime Time)
     public bool Favourite { get; set; }
     public ClipEdit Edit { get; set; } = ClipEdit.None;
     public ClipEvents? Events { get; init; }
+    public ClipEdit Saved { get; set; } = ClipEdit.None; // the edit that's in the video file
+    // clips\originals is the trainer's: the heavy OBS recording from before it re-encodes a clip to scrub smoothly.
+    public string Original => Path.Combine(Path.GetDirectoryName(File)!, "unedited", Path.GetFileName(File));
+    public string Source => System.IO.File.Exists(Original) ? Original : File; // what the editor plays: the recording
 }
 
 // In and Out are seconds into the video; Out 0 means the end.
