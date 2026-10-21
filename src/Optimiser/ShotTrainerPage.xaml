@@ -312,9 +312,11 @@
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                   <Button x:Name="FavouriteButton" Style="{StaticResource SecondaryButton}" FontFamily="{StaticResource Icons}" Content="&#xE734;"
                           MinWidth="40" Click="OnFavourite" ToolTip="Favourite" AutomationProperties.Name="Favourite" />
-                  <Button Style="{StaticResource SecondaryButton}" Content="Full screen" Margin="10,0,0,0" Click="OnFullScreen"
+                  <Button Style="{StaticResource SecondaryButton}" FontFamily="{StaticResource Icons}" Content="&#xE740;" MinWidth="40" Margin="10,0,0,0"
+                          Click="OnFullScreen" AutomationProperties.Name="Full screen"
                           ToolTip="Space plays and pauses, arrows skip 5 s, Esc goes back" />
-                  <Button x:Name="PlayButton" Style="{StaticResource AccentButton}" Content="Play" MinWidth="84" Margin="10,0,0,0" Click="OnPlay" />
+                  <Button x:Name="PlayButton" Style="{StaticResource AccentButton}" FontFamily="{StaticResource Icons}" Content="&#xE768;" MinWidth="56"
+                          Margin="10,0,0,0" Click="OnPlay" ToolTip="Play / pause" AutomationProperties.Name="Play or pause" />
                 </StackPanel>
                 <StackPanel VerticalAlignment="Center">
                   <TextBlock x:Name="ClipName" FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis" />
