@@ -628,6 +628,26 @@ File.WriteAllText(Path.ChangeExtension(newer, ".json"), """{"shot": "6. Wall air
 var clips = Training.Clips();
 Check(clips.Count == 2 && clips[0].Shot == "6. Wall air dribble" && clips[0].Result == "GOAL!" && clips[1].Shot == "older",
       "clips list newest first, named from their .json, or from the file without one");
+Check(!clips[1].Favourite && clips[1].Edit == ClipEdit.None && clips[1].Events == null, "a clip without a .json isn't edited");
+clips[1].Favourite = true;
+clips[1].Edit = ClipEdit.None with { In = 2.5, Saturation = 1.4 };
+Training.SaveEdits(clips[1]);
+File.WriteAllText(Path.ChangeExtension(newer, ".json"),
+    """{"shot": "6. Wall air dribble", "result": "GOAL!", "later": 1, "events": {"length": 20, "touches": [9.5, 6.5, 12], "goal": 14, "shot_start": null}}""");
+clips[0].Favourite = true;
+Training.SaveEdits(clips[0]);
+clips = Training.Clips();
+Check(clips[1].Favourite && clips[1].Edit == ClipEdit.None with { In = 2.5, Saturation = 1.4 },
+      "favourite and edit save to a new .json for a clip without one");
+Check(clips[0].Favourite && clips[0].Shot == "6. Wall air dribble" && clips[0].Edit == ClipEdit.None
+      && File.ReadAllText(Path.ChangeExtension(newer, ".json")).Contains("\"later\": 1"),
+      "saving a favourite keeps what the trainer wrote");
+Check(clips[0].Events is { Goal: 14, ShotStart: null, Touches.Length: 3 } ev && ev.Shot() == (5.5, 16.5) && ev.GoalOnly() == (9, 16),
+      "the shot cut runs from 1 s before the first touch to 2.5 s after the goal; the goal cut 5 s before to 2 s after");
+Check(new ClipEvents(20, [3, 18.5], null, 1.5).Shot() == (0.5, 20) && new ClipEvents(20, [], null, null).Shot() == null
+      && new ClipEvents(20, [], null, null).GoalOnly() == null,
+      "without a goal the cut ends 3 s after the last touch, never past the end; without events there's no cut");
+Check(ColourEffect.Shader != null, "the clip colour shader compiles with Windows' d3dcompiler_47.dll");
 Training.Delete(clips[0]);
 Check(!File.Exists(newer) && !File.Exists(Path.ChangeExtension(newer, ".json")) && Training.Clips().Count == 1,
       "deleting a clip removes its video and its .json");

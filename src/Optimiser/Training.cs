@@ -49,13 +49,15 @@ public static class Training
 
     // Written to a temp file and swapped in, so the trainer never reads half a file. The swap can fail for a moment
     // while the trainer has the file open.
-    public static void Save(JsonObject settings)
+    public static void Save(JsonObject settings) => Write(SettingsFile, settings);
+
+    static void Write(string file, JsonObject json)
     {
-        var temp = SettingsFile + ".tmp";
-        File.WriteAllText(temp, settings.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        var temp = file + ".tmp";
+        File.WriteAllText(temp, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         for (var i = 0; ; i++)
         {
-            try { File.Move(temp, SettingsFile, true); return; }
+            try { File.Move(temp, file, true); return; }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException && i < 9) { Thread.Sleep(20); }
         }
     }
@@ -68,16 +70,45 @@ public static class Training
 
     public static string ClipsFolder => Path.Combine(Folder, "clips");
 
-    // The trainer saves OBS's replay buffer as clips\<time> <shot>.mp4, with a .json beside it naming the shot and result.
+    // The trainer saves OBS's replay buffer as clips\<time> <shot>.mp4, with a .json beside it naming the shot and result,
+    // and "events": Peter's touches, the goal and the shot's start, in seconds from the start of the video. Optimiser adds
+    // "favourite" and "edit" (the trim and colours), so the video itself is never changed.
     public static List<ShotClip> Clips()
     {
         if (!Directory.Exists(ClipsFolder)) return [];
         return [.. Directory.GetFiles(ClipsFolder, "*.mp4").Select(file =>
         {
             var about = Read(Path.ChangeExtension(file, ".json"));
+            var events = about["events"] as JsonObject;
+            var edit = about["edit"] as JsonObject ?? [];
             return new ShotClip(file, about["shot"]?.ToString() ?? Path.GetFileNameWithoutExtension(file),
-                            about["result"]?.ToString() ?? "", File.GetLastWriteTime(file));
+                            about["result"]?.ToString() ?? "", File.GetLastWriteTime(file))
+            {
+                Favourite = Flag(about, "favourite", false),
+                Edit = new ClipEdit(Number(edit, "in", 0), Number(edit, "out", 0), Number(edit, "brightness", 0),
+                                    Number(edit, "contrast", 1), Number(edit, "saturation", 1), Number(edit, "warmth", 0)),
+                Events = events == null ? null : new ClipEvents(Number(events, "length", 20),
+                    [.. (events["touches"] as JsonArray ?? []).Select(t => t is JsonValue v && v.TryGetValue(out double d) ? d : -1).Where(t => t >= 0)],
+                    events["goal"] is JsonValue g && g.TryGetValue(out double goal) ? (double?)goal : null,
+                    events["shot_start"] is JsonValue st && st.TryGetValue(out double start) ? (double?)start : null),
+            };
         }).OrderByDescending(c => c.Time)];
+    }
+
+    // Into the clip's .json, keeping what the trainer wrote. Makes one if an old clip has none.
+    public static void SaveEdits(ShotClip clip)
+    {
+        var file = Path.ChangeExtension(clip.File, ".json");
+        var about = Read(file);
+        about["favourite"] = clip.Favourite;
+        var e = clip.Edit;
+        if (e == ClipEdit.None) about.Remove("edit");
+        else about["edit"] = new JsonObject
+        {
+            ["in"] = e.In, ["out"] = e.Out, ["brightness"] = e.Brightness, ["contrast"] = e.Contrast,
+            ["saturation"] = e.Saturation, ["warmth"] = e.Warmth,
+        };
+        Write(file, about);
     }
 
     // To the Recycle Bin, so a clip deleted by mistake can be got back.
@@ -243,4 +274,27 @@ public static class Training
 public record ShotClip(string File, string Shot, string Result, DateTime Time)
 {
     public string Info => Result == "" ? $"{Time:d MMM, HH:mm}" : $"{Result}   {Time:d MMM, HH:mm}";
+    public bool Favourite { get; set; }
+    public ClipEdit Edit { get; set; } = ClipEdit.None;
+    public ClipEvents? Events { get; init; }
+}
+
+// In and Out are seconds into the video; Out 0 means the end.
+public record ClipEdit(double In, double Out, double Brightness, double Contrast, double Saturation, double Warmth)
+{
+    public static readonly ClipEdit None = new(0, 0, 0, 1, 1, 0);
+}
+
+public record ClipEvents(double Length, double[] Touches, double? Goal, double? ShotStart)
+{
+    // From just before the shot (or Peter's first touch) to just after the goal (or his last touch).
+    public (double In, double Out)? Shot()
+    {
+        var from = ShotStart ?? (Touches.Length > 0 ? (double?)Touches.Min() : null);
+        if (from == null) return null;
+        var to = Goal + 2.5 ?? (Touches.Length > 0 ? Touches.Max() + 3 : Length);
+        return (Math.Max(0, from.Value - 1), Math.Min(Length, to));
+    }
+
+    public (double In, double Out)? GoalOnly() => Goal is double g ? (Math.Max(0, g - 5), Math.Min(Length, g + 2)) : null;
 }

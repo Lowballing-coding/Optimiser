@@ -271,39 +271,137 @@
             <ColumnDefinition Width="20" />
             <ColumnDefinition Width="*" MinWidth="240" />
           </Grid.ColumnDefinitions>
-          <Border Style="{StaticResource Panel}" VerticalAlignment="Top">
+          <StackPanel>
+          <Border Style="{StaticResource Panel}">
             <StackPanel>
               <Border Background="Black" CornerRadius="6" Height="340">
                 <MediaElement x:Name="Player" LoadedBehavior="Manual" UnloadedBehavior="Close" Stretch="Uniform"
-                              MediaEnded="OnEnded" />
+                              MediaOpened="OnOpened" MediaEnded="OnEnded" MouseLeftButtonDown="OnVideoClick" Cursor="Hand"
+                              ToolTip="Double-click for full screen" />
               </Border>
-              <DockPanel Margin="0,16,0,0">
+              <Slider x:Name="Seek" Style="{StaticResource Range}" IsSnapToTickEnabled="False" Minimum="0" Maximum="1"
+                      AutomationProperties.Name="Position in the clip" ValueChanged="OnSeek" />
+              <DockPanel Margin="0,12,0,0">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                  <Button x:Name="PlayButton" Style="{StaticResource AccentButton}" Content="Play" MinWidth="84" Click="OnPlay" />
-                  <Button Style="{StaticResource SecondaryButton}" Content="Delete" Margin="10,0,0,0" Click="OnDelete"
-                          ToolTip="Moves the clip to the Recycle Bin" />
-                  <Button Style="{StaticResource SecondaryButton}" Content="Open folder" Margin="10,0,0,0" Click="OnClipsFolder" />
+                  <Button x:Name="FavouriteButton" Style="{StaticResource SecondaryButton}" FontFamily="{StaticResource Icons}" Content="&#xE734;"
+                          MinWidth="40" Click="OnFavourite" ToolTip="Favourite" AutomationProperties.Name="Favourite" />
+                  <Button Style="{StaticResource SecondaryButton}" Content="Full screen" Margin="10,0,0,0" Click="OnFullScreen"
+                          ToolTip="Space plays and pauses, arrows skip 5 s, Esc goes back" />
+                  <Button x:Name="PlayButton" Style="{StaticResource AccentButton}" Content="Play" MinWidth="84" Margin="10,0,0,0" Click="OnPlay" />
                 </StackPanel>
                 <StackPanel VerticalAlignment="Center">
                   <TextBlock x:Name="ClipName" FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis" />
                   <TextBlock x:Name="ClipInfo" Style="{StaticResource MutedText}" FontSize="13" Margin="0,4,0,0" />
                 </StackPanel>
               </DockPanel>
+              <WrapPanel Margin="0,14,0,0">
+                <Button x:Name="EditButton" Style="{StaticResource SecondaryButton}" Content="Edit" Click="OnEdit"
+                        ToolTip="Trim the clip and change its colours. The video file itself isn't changed." />
+                <Button Style="{StaticResource SecondaryButton}" Content="Delete" Margin="10,0,0,0" Click="OnDelete"
+                        ToolTip="Moves the clip to the Recycle Bin" />
+                <Button Style="{StaticResource SecondaryButton}" Content="Open folder" Margin="10,0,0,0" Click="OnClipsFolder" />
+              </WrapPanel>
             </StackPanel>
           </Border>
-          <Border Grid.Column="2" Style="{StaticResource Panel}" Padding="10" VerticalAlignment="Top">
-            <ItemsControl x:Name="ClipList">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                  <RadioButton Style="{StaticResource ClipRow}" Checked="OnClip" AutomationProperties.Name="{Binding Shot}">
-                    <StackPanel>
-                      <TextBlock Text="{Binding Shot}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                      <TextBlock Text="{Binding Info}" Style="{StaticResource MutedText}" FontSize="12.5" Margin="0,3,0,0" />
+
+          <Border x:Name="EditPanel" Style="{StaticResource Panel}" Margin="0,20,0,0" Visibility="Collapsed">
+            <StackPanel>
+              <TextBlock Text="Edit" Style="{StaticResource PanelTitle}" />
+              <DockPanel>
+                <TextBlock x:Name="TrimText" Style="{StaticResource SliderValue}" />
+                <TextBlock Style="{StaticResource SliderName}" Text="Time" />
+              </DockPanel>
+              <WrapPanel Margin="0,12,0,0">
+                <Button x:Name="ShotTrim" Style="{StaticResource AccentButton}" Content="Cut to the shot" Click="OnTrim" Tag="shot" Margin="0,0,10,8"
+                        ToolTip="From just before the shot to just after the goal or your last touch" />
+                <Button x:Name="GoalTrim" Style="{StaticResource SecondaryButton}" Content="Just the goal" Click="OnTrim" Tag="goal" Margin="0,0,10,8"
+                        ToolTip="The 5 s before the goal and 2 s after" />
+                <Button Style="{StaticResource SecondaryButton}" Content="Start here" Click="OnTrim" Tag="in" Margin="0,0,10,8"
+                        ToolTip="Starts the clip where the player is now" />
+                <Button Style="{StaticResource SecondaryButton}" Content="End here" Click="OnTrim" Tag="out" Margin="0,0,10,8"
+                        ToolTip="Ends the clip where the player is now" />
+                <Button Style="{StaticResource SecondaryButton}" Content="Whole clip" Click="OnTrim" Tag="all" Margin="0,0,10,8" />
+              </WrapPanel>
+
+              <StackPanel x:Name="Colours" Margin="0,14,0,0">
+                <DockPanel>
+                  <Border Style="{StaticResource SegmentBox}" DockPanel.Dock="Right">
+                    <StackPanel Orientation="Horizontal">
+                      <RadioButton x:Name="Natural" Style="{StaticResource Segment}" GroupName="Looks" Content="Natural" Click="OnLook" Tag="0,0,0,0" />
+                      <RadioButton Style="{StaticResource Segment}" GroupName="Looks" Content="Vivid" Click="OnLook" Tag="5,20,50,5" />
+                      <RadioButton Style="{StaticResource Segment}" GroupName="Looks" Content="Cinematic" Click="OnLook" Tag="-5,30,-25,30" />
+                      <RadioButton Style="{StaticResource Segment}" GroupName="Looks" Content="Bright" Click="OnLook" Tag="30,10,15,0" />
+                      <RadioButton Style="{StaticResource Segment}" GroupName="Looks" Content="Ice" Click="OnLook" Tag="0,15,10,-60" />
                     </StackPanel>
-                  </RadioButton>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                  </Border>
+                  <TextBlock Style="{StaticResource SliderName}" Text="Colours" VerticalAlignment="Center" />
+                </DockPanel>
+                <UniformGrid Columns="2" Margin="0,8,0,0">
+                  <StackPanel Margin="0,0,30,0">
+                    <DockPanel Margin="0,10,0,0">
+                      <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=Brightness, StringFormat='{}{0:+0;-0;0}'}" />
+                      <TextBlock Text="Brightness" />
+                    </DockPanel>
+                    <Slider x:Name="Brightness" Style="{StaticResource Range}" Minimum="-100" Maximum="100" TickFrequency="5" ValueChanged="OnColour"
+                            AutomationProperties.Name="Brightness" />
+                  </StackPanel>
+                  <StackPanel>
+                    <DockPanel Margin="0,10,0,0">
+                      <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=Contrast, StringFormat='{}{0:+0;-0;0}'}" />
+                      <TextBlock Text="Contrast" />
+                    </DockPanel>
+                    <Slider x:Name="Contrast" Style="{StaticResource Range}" Minimum="-100" Maximum="100" TickFrequency="5" ValueChanged="OnColour"
+                            AutomationProperties.Name="Contrast" />
+                  </StackPanel>
+                  <StackPanel Margin="0,0,30,0">
+                    <DockPanel Margin="0,16,0,0">
+                      <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=Saturation, StringFormat='{}{0:+0;-0;0}'}" />
+                      <TextBlock Text="Colour" />
+                    </DockPanel>
+                    <Slider x:Name="Saturation" Style="{StaticResource Range}" Minimum="-100" Maximum="100" TickFrequency="5" ValueChanged="OnColour"
+                            AutomationProperties.Name="Colour strength" />
+                  </StackPanel>
+                  <StackPanel>
+                    <DockPanel Margin="0,16,0,0">
+                      <TextBlock Style="{StaticResource SliderValue}" Text="{Binding Value, ElementName=Warmth, StringFormat='{}{0:+0;-0;0}'}" />
+                      <TextBlock Text="Warmth" />
+                    </DockPanel>
+                    <Slider x:Name="Warmth" Style="{StaticResource Range}" Minimum="-100" Maximum="100" TickFrequency="5" ValueChanged="OnColour"
+                            AutomationProperties.Name="Warmth" />
+                  </StackPanel>
+                </UniformGrid>
+              </StackPanel>
+              <TextBlock x:Name="EditNote" Style="{StaticResource SliderHint}" Margin="0,18,0,0"
+                         Text="Saved as you go. Your video file isn't changed: the edits play here and in full screen." />
+            </StackPanel>
+          </Border>
+          </StackPanel>
+          <Border Grid.Column="2" Style="{StaticResource Panel}" Padding="10" VerticalAlignment="Top">
+            <StackPanel>
+              <DockPanel Margin="10,6,10,12">
+                <CheckBox x:Name="FavouritesOnly" DockPanel.Dock="Right" Style="{StaticResource Switch}" Click="OnFavouritesOnly"
+                          AutomationProperties.Name="Favourites only" />
+                <TextBlock Text="Favourites only" VerticalAlignment="Center" />
+              </DockPanel>
+              <ItemsControl x:Name="ClipList">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <RadioButton Style="{StaticResource ClipRow}" Checked="OnClip" AutomationProperties.Name="{Binding Shot}">
+                      <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="&#xE735;" FontFamily="{StaticResource Icons}" Foreground="{StaticResource Accent}"
+                                   Margin="8,2,0,0" Visibility="{Binding Favourite, Converter={StaticResource Vis}}" />
+                        <StackPanel>
+                          <TextBlock Text="{Binding Shot}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Text="{Binding Info}" Style="{StaticResource MutedText}" FontSize="12.5" Margin="0,3,0,0" />
+                        </StackPanel>
+                      </DockPanel>
+                    </RadioButton>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock x:Name="NoFavourites" Style="{StaticResource MutedText}" FontSize="12.5" Margin="10,0,10,8" Visibility="Collapsed"
+                         Text="No favourites yet. Pick a clip and press the star." />
+            </StackPanel>
           </Border>
         </Grid>
       </StackPanel>
