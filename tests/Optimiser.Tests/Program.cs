@@ -625,9 +625,13 @@ File.WriteAllText(older, "");
 File.SetLastWriteTime(older, DateTime.Now.AddHours(-1));
 File.WriteAllText(newer, "");
 File.WriteAllText(Path.ChangeExtension(newer, ".json"), """{"shot": "6. Wall air dribble", "result": "GOAL!"}""");
+File.WriteAllText(Path.Combine(Training.ClipsFolder, "newer.scrub.mp4"), "");
+File.WriteAllText(Path.Combine(Training.ClipsFolder, "saving.tmp.mp4"), "");
 var clips = Training.Clips();
+File.Delete(Path.Combine(Training.ClipsFolder, "newer.scrub.mp4"));
+File.Delete(Path.Combine(Training.ClipsFolder, "saving.tmp.mp4"));
 Check(clips.Count == 2 && clips[0].Shot == "6. Wall air dribble" && clips[0].Result == "GOAL!" && clips[1].Shot == "older",
-      "clips list newest first, named from their .json, or from the file without one");
+      "clips list newest first, named from their .json, or from the file without one, without files still being written");
 Check(!clips[1].Favourite && clips[1].Edit == ClipEdit.None && clips[1].Events == null, "a clip without a .json isn't edited");
 clips[1].Favourite = true;
 clips[1].Edit = ClipEdit.None with { In = 2.5, Saturation = 1.4 };

@@ -22,6 +22,7 @@ public class ClipWindow : Window
     readonly ShotClip clip;
     readonly TimeSpan start;
     bool playing;
+    TimeSpan last;
 
     public ClipWindow(ShotClip clip, TimeSpan at, Window? owner)
     {
@@ -46,7 +47,7 @@ public class ClipWindow : Window
         MouseMove += (_, _) => ShowHint();
         MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 2) Close(); else Toggle(); };
         KeyDown += OnKey;
-        Closed += (_, _) => { ticker.Stop(); hideHint.Stop(); player.Close(); };
+        Closed += (_, _) => { ticker.Stop(); hideHint.Stop(); last = player.Position; player.Close(); }; // Position reads 0 once closed
     }
 
     double To => clip.Edit.Out > 0 ? clip.Edit.Out : player.NaturalDuration.HasTimeSpan ? player.NaturalDuration.TimeSpan.TotalSeconds : double.MaxValue;
@@ -59,7 +60,7 @@ public class ClipWindow : Window
         else player.Pause(); // shows the frame it was on
         ShowHint();
         ShowDialog();
-        return player.Position;
+        return last;
     }
 
     void Toggle()
