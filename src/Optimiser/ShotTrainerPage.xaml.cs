@@ -80,6 +80,7 @@ public partial class ShotTrainerPage : UserControl
         Repeat.IsChecked = Training.Flag(s, "repeat", false);
         ShowPath.IsChecked = Training.Flag(s, "show_path", true);
         Replay.IsChecked = Training.Flag(s, "replay", true);
+        ReplayAll.IsChecked = Training.Flag(s, "replay_all", true);
         InfiniteBoost.IsChecked = Training.Flag(s, "infinite_boost", false);
         AutoDifficulty.IsChecked = Training.Flag(s, "auto_difficulty", false);
         var shots = s["shots"] as JsonArray;
