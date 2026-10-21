@@ -668,6 +668,7 @@ Check(Path.GetFileName(renamed.File) == "Flip reset (2).mp4" && File.Exists(rena
       && Training.Clips().Single(c => c.File == renamed.File).Shot == "Flip reset?",
       "renaming moves the video and its .json, leaves out characters files can't have, and doesn't overwrite another clip");
 Check(Path.GetFileName(Training.Rename(renamed, "nul").File) == "nul clip.mp4", "a name Windows keeps for devices still works");
+File.Delete(Path.Combine(Training.ClipsFolder, "Flip reset.mp4"));
 Check(ColourEffect.Shader != null, "the clip colour shader compiles with Windows' d3dcompiler_47.dll");
 Training.Delete(clips[0]);
 Check(!File.Exists(newer) && !File.Exists(Path.ChangeExtension(newer, ".json")) && Training.Clips().Count == 1,
