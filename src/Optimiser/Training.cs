@@ -105,7 +105,28 @@ public static class Training
         if (!Path.GetFileName(exe).Equals("RocketLeague.exe", StringComparison.OrdinalIgnoreCase)) return;
         lock (games) games.Add(pid);
         OpenShift();
-        if (Settings.Get(WithGameSetting, false) && Installed && !Running) Start();
+        if (Settings.Get(WithGameSetting, false) && Installed && !Running && !Leaving) Start();
+    }
+
+    // leave.bat (Leave training) reopens Rocket League without RLBot, and marks that here so this doesn't start
+    // training again as the game reopens.
+    static bool Leaving
+    {
+        get
+        {
+            var flag = Path.Combine(Folder, "leaving.flag");
+            return File.Exists(flag) && DateTime.Now - File.GetLastWriteTime(flag) < TimeSpan.FromSeconds(60);
+        }
+    }
+
+    // Back to normal Rocket League: stops RLBot and reopens the game without it, for online play. False when the
+    // trainer has no leave.bat.
+    public static bool Leave()
+    {
+        var leave = Path.Combine(Folder, "leave.bat");
+        if (!File.Exists(leave)) return false;
+        Tweaks.OpenAsYou(leave);
+        return true;
     }
 
     static readonly HashSet<uint> games = []; // Rocket League processes seen starting
