@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace Optimiser;
@@ -30,7 +31,7 @@ public partial class ShotTrainerPage : UserControl
         saver.Tick += (_, _) => SaveNow();
         IsVisibleChanged += (_, _) =>
         {
-            if (!IsVisible) { Pause(); SaveNow(); }
+            if (!IsVisible) LetGo();
             else if (!sample) Show();
         };
     }
@@ -173,7 +174,7 @@ public partial class ShotTrainerPage : UserControl
         TrainingTab.Visibility = clips ? Visibility.Collapsed : Visibility.Visible;
         ClipsTab.Visibility = clips ? Visibility.Visible : Visibility.Collapsed;
         if (clips) ShowClips();
-        else { Pause(); SaveNow(); }
+        else LetGo();
     }
 
     void ShowClips(string? pick = null)
@@ -191,7 +192,11 @@ public partial class ShotTrainerPage : UserControl
         ClipList.UpdateLayout(); // so the row exists to be picked
         if (ClipList.ItemContainerGenerator.ContainerFromIndex(index) is ContentPresenter row
             && VisualTreeHelper.GetChildrenCount(row) > 0 && VisualTreeHelper.GetChild(row, 0) is RadioButton first)
+        {
+            autoPicked = true; // shows its first frame; a clip Peter clicks plays straight away
             first.IsChecked = true;
+            autoPicked = false;
+        }
     }
 
     ShotClip? clip;
@@ -199,8 +204,18 @@ public partial class ShotTrainerPage : UserControl
     readonly ColourEffect colour = new();
     readonly System.Windows.Threading.DispatcherTimer ticker = new() { Interval = TimeSpan.FromMilliseconds(50) };
     readonly System.Windows.Threading.DispatcherTimer saver = new() { Interval = TimeSpan.FromMilliseconds(400) };
+    readonly Stack<ClipEdit> undo = new(), redo = new();
+    bool saving, autoPicked;
 
     void OnClip(object sender, RoutedEventArgs e) => Pick((ShotClip)((FrameworkElement)sender).DataContext);
+
+    // Closes the video when the tab or page is left, so the trainer can re-encode or replace it.
+    void LetGo()
+    {
+        Pause();
+        SaveNow();
+        Player.Source = null;
+    }
 
     void Pick(ShotClip? next)
     {
@@ -210,9 +225,13 @@ public partial class ShotTrainerPage : UserControl
         (ClipName.Text, ClipInfo.Text) = (clip.Shot, clip.Info);
         ShowFavourite();
         ShowEdit();
-        Player.Source = new Uri(clip.File);
-        Player.Play(); // then straight to Pause, which shows the first frame
-        Pause();
+        undo.Clear();
+        redo.Clear();
+        Player.Source = new Uri(clip.Source);
+        Player.Play();
+        if (autoPicked) { Pause(); return; } // Pause straight after Play shows the first frame
+        (playing, PlayButton.Content) = (true, "Pause");
+        ticker.Start();
     }
 
     void ShowFavourite() => (FavouriteButton.Content, FavouriteButton.Foreground) =
@@ -237,6 +256,13 @@ public partial class ShotTrainerPage : UserControl
         GoalTrim.IsEnabled = clip.Events?.GoalOnly() != null;
         TrimText.Text = e.In == 0 && e.Out == 0 ? "Whole clip"
             : $"{e.In:0.0} s to {(e.Out > 0 ? $"{e.Out:0.0} s" : "the end")}";
+        UndoButton.IsEnabled = undo.Count > 0 && !saving;
+        RedoButton.IsEnabled = redo.Count > 0 && !saving;
+        ResetButton.IsEnabled = e != ClipEdit.None && !saving;
+        SaveButton.IsEnabled = e != clip.Saved && !saving && Training.Ffmpeg != null;
+        if (!saving) EditNote.Text = Training.Ffmpeg == null ? "Saving into the clip needs ffmpeg, which isn't installed. Edits still play here."
+            : e != clip.Saved ? "Unsaved changes. They play here; Save writes them into the clip."
+            : e == ClipEdit.None ? "This is the clip as recorded." : "Saved into the clip.";
     }
 
     void OnOpened(object sender, RoutedEventArgs e)
@@ -316,7 +342,7 @@ public partial class ShotTrainerPage : UserControl
         ShowPosition();
     }
 
-    void OnVideoClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    void OnVideoClick(object sender, MouseButtonEventArgs e)
     {
         if (e.ClickCount == 2) OnFullScreen(sender, e);
         else OnPlay(sender, e);
@@ -347,8 +373,7 @@ public partial class ShotTrainerPage : UserControl
             "out" => (clip.Edit.In < at ? clip.Edit.In : 0, at),
             _ => (0.0, 0.0),
         }) ?? (0.0, 0.0);
-        clip.Edit = clip.Edit with { In = Math.Round(from, 1), Out = Math.Round(to, 1) };
-        Edited();
+        Change(clip.Edit with { In = Math.Round(from, 1), Out = Math.Round(to, 1) });
         Player.Position = TimeSpan.FromSeconds(clip.Edit.In);
         ShowPosition();
     }
@@ -364,11 +389,21 @@ public partial class ShotTrainerPage : UserControl
     void OnColour(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (showing || clip == null) return;
-        clip.Edit = clip.Edit with
+        Change(clip.Edit with
         {
             Brightness = Brightness.Value / 100 * 0.3, Contrast = 1 + Contrast.Value / 100 * 0.6,
             Saturation = 1 + Saturation.Value / 100, Warmth = Warmth.Value / 100 * 0.15,
-        };
+        }, burst: true);
+    }
+
+    // One undo step per change; a slider drag or a look (four sliders at once) is one step, since saver is still
+    // counting down from the previous change.
+    void Change(ClipEdit next, bool burst = false)
+    {
+        if (clip == null || next == clip.Edit) return;
+        if (!burst || !saver.IsEnabled) undo.Push(clip.Edit);
+        redo.Clear();
+        clip.Edit = next;
         Edited();
     }
 
@@ -377,6 +412,43 @@ public partial class ShotTrainerPage : UserControl
         ShowEdit();
         saver.Stop();
         saver.Start(); // a slider drag saves once, when it stops
+    }
+
+    void OnUndo(object sender, RoutedEventArgs e) => Step(undo, redo);
+    void OnRedo(object sender, RoutedEventArgs e) => Step(redo, undo);
+
+    void Step(Stack<ClipEdit> from, Stack<ClipEdit> to)
+    {
+        if (clip == null || from.Count == 0) return;
+        to.Push(clip.Edit);
+        clip.Edit = from.Pop();
+        saver.Stop(); // so the next slider change is its own step
+        Edited();
+    }
+
+    void OnReset(object sender, RoutedEventArgs e) => Change(ClipEdit.None);
+
+    async void OnSaveVideo(object sender, RoutedEventArgs e)
+    {
+        if (clip == null || saving || sample) return;
+        var editing = clip;
+        saving = true;
+        Pause();
+        Player.Source = null; // lets go of the file, so it can be replaced
+        ShowEdit();
+        EditNote.Text = editing.Edit == ClipEdit.None ? "Putting the original back…" : "Saving the edit into the clip…";
+        try
+        {
+            await Training.SaveVideo(editing);
+            EditNote.Text = editing.Edit == ClipEdit.None ? "The clip is back to how it was recorded." : "Saved into the clip. Reset and Save puts the original back.";
+        }
+        catch (Exception ex) { EditNote.Text = $"Couldn't save the clip: {ex.Message}"; }
+        saving = false;
+        if (clip != editing) return;
+        ShowEdit();
+        Player.Source = new Uri(clip.Source);
+        Player.Play();
+        Pause();
     }
 
     void SaveNow(bool always = false)
@@ -395,6 +467,33 @@ public partial class ShotTrainerPage : UserControl
         var at = new ClipWindow(clip, Player.Position, Window.GetWindow(this)).Watch(was);
         Player.Position = at;
         ShowPosition();
+    }
+
+    void OnRename(object sender, RoutedEventArgs e)
+    {
+        if (clip == null || saving) return;
+        (RenameBox.Text, RenameBox.Visibility, ClipName.Visibility) = (clip.Shot, Visibility.Visible, Visibility.Collapsed);
+        RenameBox.Focus();
+        RenameBox.SelectAll();
+    }
+
+    void OnRenameKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape) RenameBox.Text = clip?.Shot ?? "";
+        if (e.Key is Key.Enter or Key.Escape) Keyboard.ClearFocus(); // → OnRenameDone
+    }
+
+    void OnRenameDone(object sender, RoutedEventArgs e)
+    {
+        if (RenameBox.Visibility != Visibility.Visible) return;
+        (RenameBox.Visibility, ClipName.Visibility) = (Visibility.Collapsed, Visibility.Visible);
+        if (clip == null || sample || RenameBox.Text.Trim() == clip.Shot) return;
+        SaveNow();
+        Pause();
+        Player.Source = null; // lets go of the file, so it can be moved
+        try { clip = Training.Rename(clip, RenameBox.Text); }
+        catch (Exception ex) { ClipInfo.Text = $"Couldn't rename the clip: {ex.Message}"; }
+        ShowClips(clip.File);
     }
 
     void OnDelete(object sender, RoutedEventArgs e)

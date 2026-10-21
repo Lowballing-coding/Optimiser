@@ -292,12 +292,16 @@
                 </StackPanel>
                 <StackPanel VerticalAlignment="Center">
                   <TextBlock x:Name="ClipName" FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis" />
+                  <TextBox x:Name="RenameBox" Style="{DynamicResource Field}" MaxLength="80" Visibility="Collapsed"
+                           KeyDown="OnRenameKey" LostKeyboardFocus="OnRenameDone" AutomationProperties.Name="Clip name" />
                   <TextBlock x:Name="ClipInfo" Style="{StaticResource MutedText}" FontSize="13" Margin="0,4,0,0" />
                 </StackPanel>
               </DockPanel>
               <WrapPanel Margin="0,14,0,0">
                 <Button x:Name="EditButton" Style="{StaticResource SecondaryButton}" Content="Edit" Click="OnEdit"
                         ToolTip="Trim the clip and change its colours. The video file itself isn't changed." />
+                <Button Style="{StaticResource SecondaryButton}" Content="Rename" Margin="10,0,0,0" Click="OnRename"
+                        ToolTip="Renames the clip and its file. Enter saves, Esc cancels." />
                 <Button Style="{StaticResource SecondaryButton}" Content="Delete" Margin="10,0,0,0" Click="OnDelete"
                         ToolTip="Moves the clip to the Recycle Bin" />
                 <Button Style="{StaticResource SecondaryButton}" Content="Open folder" Margin="10,0,0,0" Click="OnClipsFolder" />
@@ -307,7 +311,19 @@
 
           <Border x:Name="EditPanel" Style="{StaticResource Panel}" Margin="0,20,0,0" Visibility="Collapsed">
             <StackPanel>
-              <TextBlock Text="Edit" Style="{StaticResource PanelTitle}" />
+              <DockPanel Margin="0,0,0,14">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                  <Button x:Name="UndoButton" Style="{StaticResource SecondaryButton}" FontFamily="{StaticResource Icons}" Content="&#xE7A7;" MinWidth="40"
+                          Click="OnUndo" ToolTip="Undo" AutomationProperties.Name="Undo" />
+                  <Button x:Name="RedoButton" Style="{StaticResource SecondaryButton}" FontFamily="{StaticResource Icons}" Content="&#xE7A6;" MinWidth="40"
+                          Margin="8,0,0,0" Click="OnRedo" ToolTip="Redo" AutomationProperties.Name="Redo" />
+                  <Button x:Name="ResetButton" Style="{StaticResource SecondaryButton}" Content="Reset" Margin="8,0,0,0" Click="OnReset"
+                          ToolTip="Back to the clip as recorded. Save afterwards to put the original back in the file." />
+                  <Button x:Name="SaveButton" Style="{StaticResource AccentButton}" Content="Save" MinWidth="84" Margin="8,0,0,0" Click="OnSaveVideo"
+                          ToolTip="Writes the edit into the clip's video. The recording is kept, so Reset still works." />
+                </StackPanel>
+                <TextBlock Text="Edit" Style="{StaticResource PanelTitle}" Margin="0" VerticalAlignment="Center" />
+              </DockPanel>
               <DockPanel>
                 <TextBlock x:Name="TrimText" Style="{StaticResource SliderValue}" />
                 <TextBlock Style="{StaticResource SliderName}" Text="Time" />
@@ -373,7 +389,7 @@
                 </UniformGrid>
               </StackPanel>
               <TextBlock x:Name="EditNote" Style="{StaticResource SliderHint}" Margin="0,18,0,0"
-                         Text="Saved as you go. Your video file isn't changed: the edits play here and in full screen." />
+                          />
             </StackPanel>
           </Border>
           </StackPanel>
