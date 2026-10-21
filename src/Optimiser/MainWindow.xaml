@@ -589,7 +589,7 @@
           <ItemsControl x:Name="ProfileSettings" ItemTemplate="{StaticResource RowCard}" />
 
           <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="2,16,0,0">
-            Tip: Ctrl+1 to Ctrl+7 jump straight to each page.
+            <Run x:Name="KeysTip" />
             <Hyperlink Click="OnOpenGitHub" Foreground="{StaticResource Accent}">See every change on GitHub</Hyperlink>
           </TextBlock>
         </StackPanel>

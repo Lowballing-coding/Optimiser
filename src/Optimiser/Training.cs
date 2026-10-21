@@ -31,13 +31,78 @@ public static class Training
         }
     }
 
-    // ponytail: copied from SHOTS in trainer.py; add a name here when a shot is added there
-    public static readonly string[] Shots =
+    // The trainer writes its shot names (custom shots too) to shots.json when it starts; until then, the built-in ones.
+    public static string[] Shots
+    {
+        get
+        {
+            try
+            {
+                var names = JsonNode.Parse(File.ReadAllText(Path.Combine(Folder, "shots.json"))) as JsonArray;
+                if (names?.Select(n => n?.ToString() ?? "").ToArray() is { Length: > 0 } list) return list;
+            }
+            catch { } // not written yet, or half-written
+            return BuiltInShots;
+        }
+    }
+
+    // SHOTS in trainer.py
+    public static readonly string[] BuiltInShots =
     [
         "1. Pass along the ground", "2. Bouncing ball at you", "3. Lob: easy aerial", "4. High pass: fast aerial",
         "5. Side wall pop", "6. Wall air dribble", "7. Ceiling-to-wall air dribble", "8. Pop and air dribble",
-        "9. Cross from the corner", "10. Recovery and shoot",
+        "9. Cross from the corner", "10. Recovery and shoot", "11. Save: low shot", "12. Save: high shot", "13. Kickoff",
+        "14. Backboard read", "15. Flip reset setup",
     ];
+
+    // stats.jsonl: one line per attempt, written by the trainer as each shot ends. Bad lines are skipped.
+    public static List<Attempt> Attempts()
+    {
+        var file = Path.Combine(Folder, "stats.jsonl");
+        if (!File.Exists(file)) return [];
+        List<Attempt> all = [];
+        foreach (var line in File.ReadLines(file))
+        {
+            try
+            {
+                if (JsonNode.Parse(line) is JsonObject j && DateTime.TryParse(j["time"]?.ToString(), out var time))
+                    all.Add(new Attempt(time, j["session"]?.ToString() ?? "", j["shot"]?.ToString() ?? "", Flag(j, "ok", false)));
+            }
+            catch (JsonException) { }
+        }
+        return all;
+    }
+
+    // Each shot's record, in shot order. The weakest is the lowest success rate among shots tried at least 3 times.
+    public static List<ShotStat> PerShot(List<Attempt> all, string[] shots)
+    {
+        var stats = shots.Select(name => all.Where(a => a.Shot == name).ToList())
+            .Select((tries, i) => new ShotStat(shots[i], tries.Count, tries.Count(a => a.Ok))).ToList();
+        var weakest = stats.Where(s => s.Tries >= 3).OrderBy(s => s.Rate).FirstOrDefault();
+        return [.. stats.Select(s => s with { Weakest = s == weakest })];
+    }
+
+    // The n shots to work on: lowest success rate first (3+ tries), then the least tried.
+    public static int[] Weakest(List<ShotStat> stats, int n) =>
+        [.. stats.Select((s, i) => (s, i)).OrderBy(x => x.s.Tries >= 3 ? 0 : 1).ThenBy(x => x.s.Tries >= 3 ? x.s.Rate : x.s.Tries)
+            .Take(n).Select(x => x.i)];
+
+    public static int BestStreak(IEnumerable<Attempt> attempts)
+    {
+        int best = 0, run = 0;
+        foreach (var a in attempts) best = Math.Max(best, run = a.Ok ? run + 1 : 0);
+        return best;
+    }
+
+    // The trainer's latest run: its attempts, and the clips saved while it ran.
+    public static (List<Attempt> Attempts, int Clips)? LastSession(List<Attempt> all)
+    {
+        if (all.Count == 0) return null;
+        var session = all[^1].Session;
+        var mine = all.Where(a => a.Session == session).ToList();
+        var (from, to) = (mine[0].Time.AddMinutes(-1), mine[^1].Time.AddMinutes(1));
+        return (mine, Clips().Count(c => c.Time >= from && c.Time <= to));
+    }
 
     public static JsonObject Load() => Read(SettingsFile); // missing or half-written: the trainer's defaults apply
 
@@ -393,4 +458,13 @@ public record ClipEvents(double Length, double[] Touches, double? Goal, double? 
     }
 
     public (double In, double Out)? GoalOnly() => Goal is double g ? (Math.Max(0, g - 5), Math.Min(Length, g + 2)) : null;
+}
+
+public record Attempt(DateTime Time, string Session, string Shot, bool Ok);
+
+public record ShotStat(string Shot, int Tries, int Made)
+{
+    public bool Weakest { get; init; }
+    public double Rate => Tries == 0 ? 0 : (double)Made / Tries;
+    public string Info => Tries == 0 ? "Not tried yet" : $"{Made} of {Tries}   {Rate:P0}";
 }

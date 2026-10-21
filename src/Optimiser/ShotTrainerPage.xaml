@@ -119,6 +119,7 @@
           <RadioButton x:Name="TrainingTabButton" Style="{StaticResource Segment}" GroupName="TrainerTabs" Content="Training"
                        IsChecked="True" Checked="OnTab" />
           <RadioButton x:Name="ClipsTabButton" Style="{StaticResource Segment}" GroupName="TrainerTabs" Content="Clips" Checked="OnTab" />
+          <RadioButton x:Name="StatsTabButton" Style="{StaticResource Segment}" GroupName="TrainerTabs" Content="Stats" Checked="OnTab" />
         </StackPanel>
       </Border>
 
@@ -269,6 +270,12 @@
                   <CheckBox x:Name="InfiniteBoost" DockPanel.Dock="Right" Style="{StaticResource Switch}" Click="OnSwitch" Tag="infinite_boost"
                             AutomationProperties.Name="Infinite boost" />
                   <TextBlock Text="Infinite boost" VerticalAlignment="Center" />
+                </DockPanel>
+                <DockPanel Margin="0,0,40,12">
+                  <CheckBox x:Name="AutoDifficulty" DockPanel.Dock="Right" Style="{StaticResource Switch}" Click="OnSwitch" Tag="auto_difficulty"
+                            AutomationProperties.Name="Auto difficulty"
+                            ToolTip="3 in a row and the ball gets faster and the bot sharper; miss 3 in a row and it eases off" />
+                  <TextBlock Text="Auto difficulty" VerticalAlignment="Center" />
                 </DockPanel>
               </UniformGrid>
             </StackPanel>
@@ -448,6 +455,43 @@
             </StackPanel>
           </Border>
         </Grid>
+      </StackPanel>
+
+      <StackPanel x:Name="StatsTab" Visibility="Collapsed">
+        <TextBlock x:Name="NoStats" Style="{StaticResource MutedText}" FontSize="13" Margin="0,20,0,0" MaxWidth="720" HorizontalAlignment="Left"
+                   Text="No stats yet. Every shot you play from now on is counted here." />
+        <StackPanel x:Name="StatsView">
+          <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
+            <StackPanel>
+              <TextBlock Text="Last session" Style="{StaticResource PanelTitle}" />
+              <TextBlock x:Name="SessionText" FontSize="22" FontWeight="SemiBold" />
+              <TextBlock x:Name="SessionDetail" Style="{StaticResource MutedText}" FontSize="13" Margin="0,6,0,0" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,14">
+                <Button DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Content="Train my weakest shots" Click="OnTrainWeak"
+                        ToolTip="Picks your 3 weakest shots (or the ones you've hardly tried) and starts training" />
+                <TextBlock Text="Every shot" Style="{StaticResource PanelTitle}" Margin="0" VerticalAlignment="Center" />
+              </DockPanel>
+              <TextBlock x:Name="StatsNote" Style="{StaticResource MutedText}" FontSize="13" Margin="0,0,0,12" TextWrapping="Wrap"
+                         Text="Goals (or saves) out of tries, over every session." />
+              <ItemsControl x:Name="ShotStats">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,0,0,10">
+                      <TextBlock DockPanel.Dock="Right" Text="{Binding Info}" Style="{StaticResource MutedText}" />
+                      <TextBlock DockPanel.Dock="Right" Text="Weakest" Foreground="{StaticResource Accent}" FontWeight="SemiBold" Margin="0,0,16,0"
+                                 Visibility="{Binding Weakest, Converter={StaticResource Vis}}" />
+                      <TextBlock Text="{Binding Shot}" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </StackPanel>
       </StackPanel>
     </StackPanel>
   </ScrollViewer>
