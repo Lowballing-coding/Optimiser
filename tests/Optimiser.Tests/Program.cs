@@ -693,6 +693,9 @@ Check(attempts.Count == 9 && perShot[0] is { Tries: 5, Made: 4, Weakest: false }
       && perShot[2].Tries == 0, "stats per shot, skipping a broken line; the weakest has the lowest rate of the shots tried 3+ times");
 Check(Training.Weakest(perShot, 3).SequenceEqual([1, 0, 2]) && Training.Weakest(perShot, 1).SequenceEqual([1]),
       "weakest shots: lowest rate first, then the least tried");
+List<ShotStat> perfect = [new("A", 5, 5), new("B", 0, 0), new("C", 1, 0)];
+Check(Training.Weakest(perfect, 2).SequenceEqual([1, 2]) && !Training.PerShot([.. Enumerable.Repeat(new Attempt(DateTime.Now, "s", "A", true), 3)], ["A"])[0].Weakest,
+      "a shot that's always made isn't weak");
 Check(Training.BestStreak(attempts) == 2 && Training.LastSession(attempts) is { Attempts.Count: 5 } last && last.Attempts[0].Time.Minute == 2,
       "best streak, and the last session is the latest run's attempts");
 

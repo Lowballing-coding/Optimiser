@@ -60,17 +60,21 @@ public static class Training
     {
         var file = Path.Combine(Folder, "stats.jsonl");
         if (!File.Exists(file)) return [];
-        List<Attempt> all = [];
-        foreach (var line in File.ReadLines(file))
+        try
         {
-            try
+            List<Attempt> all = [];
+            foreach (var line in File.ReadLines(file))
             {
-                if (JsonNode.Parse(line) is JsonObject j && DateTime.TryParse(j["time"]?.ToString(), out var time))
-                    all.Add(new Attempt(time, j["session"]?.ToString() ?? "", j["shot"]?.ToString() ?? "", Flag(j, "ok", false)));
+                try
+                {
+                    if (JsonNode.Parse(line) is JsonObject j && DateTime.TryParse(j["time"]?.ToString(), out var time))
+                        all.Add(new Attempt(time, j["session"]?.ToString() ?? "", j["shot"]?.ToString() ?? "", Flag(j, "ok", false)));
+                }
+                catch (JsonException) { }
             }
-            catch (JsonException) { }
+            return all;
         }
-        return all;
+        catch (IOException) { return []; } // the trainer has it locked for a moment, or it went
     }
 
     // Each shot's record, in shot order. The weakest is the lowest success rate among shots tried at least 3 times.
@@ -78,14 +82,14 @@ public static class Training
     {
         var stats = shots.Select(name => all.Where(a => a.Shot == name).ToList())
             .Select((tries, i) => new ShotStat(shots[i], tries.Count, tries.Count(a => a.Ok))).ToList();
-        var weakest = stats.Where(s => s.Tries >= 3).OrderBy(s => s.Rate).FirstOrDefault();
-        return [.. stats.Select(s => s with { Weakest = s == weakest })];
+        var weakest = stats.Select((s, i) => (s, i)).Where(x => x.s.Tries >= 3 && x.s.Rate < 1).OrderBy(x => x.s.Rate).Select(x => (int?)x.i).FirstOrDefault();
+        return [.. stats.Select((s, i) => s with { Weakest = i == weakest })];
     }
 
-    // The n shots to work on: lowest success rate first (3+ tries), then the least tried.
+    // The n shots to work on: missed ones by success rate (3+ tries), then the least tried, then shots always made.
     public static int[] Weakest(List<ShotStat> stats, int n) =>
-        [.. stats.Select((s, i) => (s, i)).OrderBy(x => x.s.Tries >= 3 ? 0 : 1).ThenBy(x => x.s.Tries >= 3 ? x.s.Rate : x.s.Tries)
-            .Take(n).Select(x => x.i)];
+        [.. stats.Select((s, i) => (s, i)).OrderBy(x => x.s.Tries < 3 ? 1 : x.s.Rate < 1 ? 0 : 2)
+            .ThenBy(x => x.s.Tries >= 3 ? x.s.Rate : x.s.Tries).Take(n).Select(x => x.i)];
 
     public static int BestStreak(IEnumerable<Attempt> attempts)
     {

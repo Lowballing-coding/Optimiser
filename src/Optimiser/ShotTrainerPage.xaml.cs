@@ -219,7 +219,7 @@ public partial class ShotTrainerPage : UserControl
         Change(s => s["shots"] = new JsonArray(stats.Select((_, i) => (JsonNode?)weak.Contains(i)).ToArray()));
         ShowSettings(Training.Load());
         StatsNote.Text = $"Training {string.Join(", ", weak.Select(i => stats[i].Shot))}.";
-        if (!Training.Running) OnStart(sender, e);
+        if (!Training.Running && Training.Installed) OnStart(sender, e);
     }
 
     void ShowClips(string? pick = null)
@@ -345,7 +345,9 @@ public partial class ShotTrainerPage : UserControl
 
     void OnTick()
     {
-        if (playing && Player.Position.TotalSeconds >= Span().To) OnEnded(this, new RoutedEventArgs());
+        var (from, to) = Span();
+        // Also back to the start of the cut if the timeline was clicked before it while playing.
+        if (playing && (Player.Position.TotalSeconds >= to || Player.Position.TotalSeconds < from - 0.1)) OnEnded(this, new RoutedEventArgs());
         ShowPosition();
     }
 
@@ -462,7 +464,7 @@ public partial class ShotTrainerPage : UserControl
         if ((string)((FrameworkElement)sender).Tag == "in") edit = edit with { In = Math.Clamp(t, 0, Math.Max(0, end - 0.5)) };
         else
         {
-            t = Math.Clamp(t, edit.In + 0.5, Length);
+            t = Math.Clamp(t, Math.Min(edit.In + 0.5, Length), Length); // a cut that starts near the end can't go past it
             edit = edit with { Out = t >= Length - 0.05 ? 0 : t };
         }
         Change(edit, burst: true);
