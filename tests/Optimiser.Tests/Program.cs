@@ -592,6 +592,8 @@ Check(tiles.OrderBy(t => StatTile.Rank(t, "Memory|GPU load")).SequenceEqual(["Me
       && tiles.OrderBy(t => StatTile.Rank(t, null)).SequenceEqual(tiles),
       "stat tiles follow the saved order, with new ones after it in their usual order");
 
+foreach (var (ok, what) in ScrollCheck.Run()) Check(ok, what);
+
 Training.Folder = Path.Combine(temp, "rl-shot-trainer");
 Directory.CreateDirectory(Training.Folder);
 Check(!Training.Installed && Training.Load().Count == 0, "no shot trainer: not installed, and its settings read as empty");
