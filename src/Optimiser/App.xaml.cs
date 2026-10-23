@@ -47,6 +47,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        SmoothScroll.Enable();
 
         // One Optimiser at a time. A new one asks the running one to close and takes over, so opening a newer
         // download replaces the older version running in the tray.
