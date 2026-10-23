@@ -217,6 +217,7 @@ public partial class ShotTrainerPage : UserControl
             {
                 var stat = shot.Index < stats.Count ? stats[shot.Index] : null;
                 var body = new StackPanel();
+                body.Children.Add(new ShotPicture { Shot = shot, Margin = new Thickness(0, 0, 0, 12) });
                 var top = new DockPanel();
                 if (shot.Level > 0)
                 {
@@ -718,7 +719,14 @@ public partial class ShotTrainerPage : UserControl
         string[] categories = ["Shooting", "Aerials & Reads", "Defense"];
         var shots = Training.BuiltInShots;
         List<ShotInfo> library = [.. shots.Select((name, i) => new ShotInfo(i, name, categories[Math.Min(2, i / 5)], 1 + i % 4,
-            "Read the ball off the wall, get there early and put it in the open corner."))];
+            "Read the ball off the wall, get there early and put it in the open corner.")
+        {
+            // Made-up throws: from a corner or the side, towards the middle, some along the ground and some as lobs.
+            Car = [i % 3 * 600 - 600, 600 + i % 4 * 300, Math.PI / 2], Ball = [i % 2 == 0 ? 2800 : -2800, 2400 + i % 3 * 500, 93],
+            Path = [.. Enumerable.Range(0, 16).Select(t => t * 0.15).Select(t => new[]
+                { (i % 2 == 0 ? 2800 : -2800) * (1 - t / 2.6), 2400 + i % 3 * 500 + 500 * t, Math.Max(93, 93 + (i % 3) * 600 * t - 325 * t * t) })],
+            Opponents = i % 2 == 0 ? new List<double[]> { new[] { 300.0, 4900, -Math.PI / 2 } } : [],
+        })];
         foreach (RadioButton pick in LevelPicker.Children) pick.IsChecked = (int)pick.Tag == 2;
         var at = new DateTime(2026, 10, 21, 20, 10, 0);
         List<Attempt> all = [.. Enumerable.Range(0, 60).Select(i => new Attempt(at.AddMinutes(i / 3.0), "a", shots[i * 7 % shots.Length], i % 5 != i % 3))];
