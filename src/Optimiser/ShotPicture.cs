@@ -1,5 +1,7 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace Optimiser;
 
@@ -11,13 +13,14 @@ public sealed class ShotPicture : FrameworkElement
     const double HalfLength = 5120, Width2 = 4096;
     static readonly Brush Blue = Frozen(new SolidColorBrush(Color.FromRgb(0x4D, 0xA3, 0xFF)));
     ShotInfo? shot;
+    BitmapImage? image;
 
     public ShotPicture() => Height = 150; // about half a pitch's shape at a card's width
 
     public ShotInfo? Shot
     {
         get => shot;
-        set { shot = value; InvalidateVisual(); }
+        set { (shot, image) = (value, Picture(value?.Image)); InvalidateVisual(); }
     }
 
     protected override void OnRender(DrawingContext dc)
@@ -28,6 +31,13 @@ public sealed class ShotPicture : FrameworkElement
         var frame = new Rect(0, 0, w, h);
         dc.PushClip(new RectangleGeometry(frame, 6, 6));
         dc.DrawRectangle(Paint("Bg"), null, frame);
+        if (image != null)
+        {
+            dc.DrawImage(image, frame);
+            dc.Pop();
+            dc.DrawRoundedRectangle(null, line, frame, 6, 6);
+            return;
+        }
 
         var s = shot;
         var points = s == null ? [] : s.Path.Concat(s.Ball == null ? [] : [s.Ball]).ToList();
@@ -83,6 +93,24 @@ public sealed class ShotPicture : FrameworkElement
         dc.DrawRoundedRectangle(colour, null, new Rect(at.X - 8, at.Y - 4.5, 16, 9), 2.5, 2.5);
         dc.DrawRectangle(Paint("Bg"), null, new Rect(at.X + 3, at.Y - 3, 2.5, 6)); // the windscreen, at the front
         dc.Pop();
+    }
+
+    // Read into memory, so the file isn't held open while the trainer redraws it. Null if it's missing or broken.
+    static BitmapImage? Picture(string? file)
+    {
+        if (file == null || !File.Exists(file)) return null;
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.CreateOptions = BitmapCreateOptions.IgnoreImageCache; // the trainer redraws them each start
+            image.UriSource = new Uri(file);
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch (Exception e) when (e is IOException or NotSupportedException or UnauthorizedAccessException) { return null; }
     }
 
     static Brush Paint(string name) => (Brush)Application.Current.FindResource(name);
