@@ -684,6 +684,11 @@ Check(Training.Shots.SequenceEqual(Training.BuiltInShots) && Training.Attempts()
       "without the trainer's shots.json and stats.jsonl: the built-in shots and no stats");
 File.WriteAllText(Path.Combine(Training.Folder, "shots.json"), """["A", "B", "C", "16. Custom shot 1"]""");
 Check(Training.Shots.SequenceEqual(["A", "B", "C", "16. Custom shot 1"]), "the shot list follows the trainer's, custom shots included");
+Check(Training.Library(["A", "B"]) is [{ Category: "Shots", Level: 0 }, { Category: "Shots" }], "without shot_info.json every shot still gets a card");
+File.WriteAllText(Path.Combine(Training.Folder, "shot_info.json"),
+    """[{"name": "B", "category": "Defense", "level": 3, "about": "Save it"}, {"name": "A", "level": 9}, "junk"]""");
+Check(Training.Library(["A", "B", "C"]) is [{ Index: 0, Category: "Shots", Level: 4 }, { Index: 1, Category: "Defense", Level: 3, About: "Save it" }, { Index: 2, Level: 0 }],
+      "shot details are matched by name, with the level kept to 1 to 4");
 string Line(string shot, bool ok, string session = "s1", int min = 0) =>
     $$"""{"time": "2026-10-21T20:{{min:00}}:00", "session": "{{session}}", "shot": "{{shot}}", "result": "x", "ok": {{(ok ? "true" : "false")}}}""";
 File.WriteAllLines(Path.Combine(Training.Folder, "stats.jsonl"),
