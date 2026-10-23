@@ -17,6 +17,11 @@
 
     <BooleanToVisibilityConverter x:Key="Vis" />
 
+    <!-- So the mouse wheel scrolls a page over its empty gaps too, not just over its text and panels. -->
+    <Style TargetType="ScrollViewer">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+
     <Style x:Key="MutedText" TargetType="TextBlock">
       <Setter Property="Foreground" Value="{StaticResource Muted}" />
       <Setter Property="TextWrapping" Value="Wrap" />

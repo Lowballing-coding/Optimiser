@@ -9,7 +9,7 @@ namespace Optimiser;
 // Each notch adds to where the page is heading, so a quick spin of the wheel keeps going smoothly.
 public static class SmoothScroll
 {
-    static readonly Dictionary<ScrollViewer, double> heading = [];
+    static readonly Dictionary<ScrollViewer, double> heading = [], wrote = [];
     static TimeSpan lastFrame;
 
     public static bool Busy => heading.Count > 0;
@@ -28,8 +28,9 @@ public static class SmoothScroll
         if (e.Handled || sender != Target(e.OriginalSource as DependencyObject, e.Delta)) return;
         var viewer = (ScrollViewer)sender;
         e.Handled = true;
-        heading[viewer] = Math.Clamp(Position(viewer) - e.Delta / 120.0 * Step(viewer), 0, viewer.ScrollableHeight);
-        if (heading.Count == 1) CompositionTarget.Rendering += OnFrame;
+        var to = Math.Clamp(Position(viewer) - e.Delta / 120.0 * Step(viewer), 0, viewer.ScrollableHeight);
+        if (heading.Count == 0) CompositionTarget.Rendering += OnFrame;
+        heading[viewer] = to;
     }
 
     static ScrollViewer? Target(DependencyObject? d, int delta)
@@ -54,17 +55,31 @@ public static class SmoothScroll
         var share = SystemParameters.ClientAreaAnimation ? 1 - Math.Exp(-seconds / 0.06) : 1;
         foreach (var (viewer, target) in heading.ToList())
         {
+            // Something else moved it since the last frame (the scrollbar, a key, a control scrolled into view), and
+            // that wins over the rest of the glide.
+            if (wrote.TryGetValue(viewer, out var last) && Math.Abs(viewer.VerticalOffset - last) > 1)
+            {
+                Stop(viewer);
+                continue;
+            }
             var to = Math.Min(target, viewer.ScrollableHeight); // the page may have got shorter
             var next = viewer.VerticalOffset + (to - viewer.VerticalOffset) * share;
             if (Math.Abs(to - next) < 0.5 || !viewer.IsVisible)
             {
                 next = to;
-                heading.Remove(viewer);
+                Stop(viewer);
             }
+            else wrote[viewer] = next;
             viewer.ScrollToVerticalOffset(next);
         }
         if (heading.Count > 0) return;
         CompositionTarget.Rendering -= OnFrame;
         lastFrame = default;
+    }
+
+    static void Stop(ScrollViewer viewer)
+    {
+        heading.Remove(viewer);
+        wrote.Remove(viewer);
     }
 }
