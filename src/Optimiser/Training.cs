@@ -58,7 +58,9 @@ public static class Training
     public static readonly string[] Levels = ["", "Silver / Gold", "Gold / Plat", "Plat / Diamond", "Diamond+"];
 
     // The Library's cards: shot_info.json, which the trainer writes beside shots.json, says each shot's category, level
-    // (1 to 4, as Levels) and what to do. A shot it doesn't describe still gets a card, under "Shots".
+    // (1 to 4, as Levels) and what to do, and for its picture where Peter's car ([x, y, yaw]), the ball ([x, y, z]),
+    // the ball's path and Necto start, and "image": the trainer's own drawing of it, with targets and Necto's roles,
+    // which the card shows when it's there. A shot it doesn't describe still gets a card, under "Shots".
     public static List<ShotInfo> Library(string[] shots)
     {
         Dictionary<string, JsonObject> about = [];
@@ -71,7 +73,21 @@ public static class Training
         catch { } // an older trainer without it, or half-written
         return [.. shots.Select((name, i) => about.TryGetValue(name, out var j)
             ? new ShotInfo(i, name, j["category"]?.ToString() ?? "Shots", Math.Clamp((int)Number(j, "level", 0), 0, 4), j["about"]?.ToString() ?? "")
+            {
+                Car = Numbers(j["car"], 2), Ball = Numbers(j["ball"], 3),
+                Image = j["image"]?.ToString() is { Length: > 0 } image ? Path.Combine(Folder, image) : null,
+                Path = [.. (j["path"] as JsonArray ?? []).Select(p => Numbers(p, 3)).OfType<double[]>()],
+                Opponents = [.. (j["opponents"] as JsonArray ?? []).Select(p => Numbers(p, 2)).OfType<double[]>()],
+            }
             : new ShotInfo(i, name, "Shots", 0, ""))];
+    }
+
+    // [x, y, ...] with at least the first n numbers, or null.
+    static double[]? Numbers(JsonNode? node, int n)
+    {
+        if (node is not JsonArray a || a.Count < n) return null;
+        var list = a.Select(v => v is JsonValue j && j.TryGetValue(out double d) ? d : double.NaN).ToArray();
+        return list.Any(double.IsNaN) ? null : list;
     }
 
     // stats.jsonl: one line per attempt, written by the trainer as each shot ends. Bad lines are skipped.
@@ -485,7 +501,14 @@ public record ClipEvents(double Length, double[] Touches, double? Goal, double? 
     public (double In, double Out)? GoalOnly() => Goal is double g ? (Math.Max(0, g - 5), Math.Min(Length, g + 2)) : null;
 }
 
-public record ShotInfo(int Index, string Name, string Category, int Level, string About);
+public record ShotInfo(int Index, string Name, string Category, int Level, string About)
+{
+    public double[]? Car { get; init; }
+    public double[]? Ball { get; init; }
+    public List<double[]> Path { get; init; } = [];
+    public List<double[]> Opponents { get; init; } = [];
+    public string? Image { get; init; }
+}
 
 public record Attempt(DateTime Time, string Session, string Shot, bool Ok);
 

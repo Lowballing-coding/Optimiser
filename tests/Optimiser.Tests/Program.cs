@@ -689,6 +689,10 @@ File.WriteAllText(Path.Combine(Training.Folder, "shot_info.json"),
     """[{"name": "B", "category": "Defense", "level": 3, "about": "Save it"}, {"name": "A", "level": 9}, "junk"]""");
 Check(Training.Library(["A", "B", "C"]) is [{ Index: 0, Category: "Shots", Level: 4 }, { Index: 1, Category: "Defense", Level: 3, About: "Save it" }, { Index: 2, Level: 0 }],
       "shot details are matched by name, with the level kept to 1 to 4");
+File.WriteAllText(Path.Combine(Training.Folder, "shot_info.json"),
+    """[{"name": "A", "car": [0, -2000, 1.57], "ball": [100, 0, 93], "path": [[100, 0, 93], [200, 500, 400], [1, 2]], "opponents": [[0, 5000], "x"]}]""");
+Check(Training.Library(["A"]) is [{ Car.Length: 3, Ball: [100, 0, 93], Path.Count: 2, Opponents.Count: 1 }],
+      "the picture's car, ball, path and Necto, skipping points that are too short or not numbers");
 string Line(string shot, bool ok, string session = "s1", int min = 0) =>
     $$"""{"time": "2026-10-21T20:{{min:00}}:00", "session": "{{session}}", "shot": "{{shot}}", "result": "x", "ok": {{(ok ? "true" : "false")}}}""";
 File.WriteAllLines(Path.Combine(Training.Folder, "stats.jsonl"),
