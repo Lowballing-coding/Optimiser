@@ -107,6 +107,38 @@
         </Setter.Value>
       </Setter>
     </Style>
+    <!-- A shot in the Library: click it to play it next. Accent edge for the shots at the player's level. -->
+    <Style x:Key="ShotCard" TargetType="Button">
+      <Setter Property="Foreground" Value="{StaticResource Text}" />
+      <Setter Property="Background" Value="{StaticResource Surface}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+      <Setter Property="Width" Value="272" />
+      <Setter Property="Margin" Value="0,0,12,12" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                    CornerRadius="8" Padding="16,14">
+              <ContentPresenter />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Box" Property="Background" Value="{StaticResource Line}" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Text}" />
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </UserControl.Resources>
 
   <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -118,6 +150,7 @@
         <StackPanel Orientation="Horizontal">
           <RadioButton x:Name="TrainingTabButton" Style="{StaticResource Segment}" GroupName="TrainerTabs" Content="Training"
                        IsChecked="True" Checked="OnTab" />
+          <RadioButton x:Name="LibraryTabButton" Style="{StaticResource Segment}" GroupName="TrainerTabs" Content="Library" Checked="OnTab" />
           <RadioButton x:Name="ClipsTabButton" Style="{StaticResource Segment}" GroupName="TrainerTabs" Content="Clips" Checked="OnTab" />
           <RadioButton x:Name="StatsTabButton" Style="{StaticResource Segment}" GroupName="TrainerTabs" Content="Stats" Checked="OnTab" />
         </StackPanel>
@@ -286,6 +319,35 @@
             </StackPanel>
           </Border>
         </StackPanel>
+      </StackPanel>
+
+      <StackPanel x:Name="LibraryTab" Visibility="Collapsed">
+        <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
+          <StackPanel>
+            <DockPanel>
+              <Border DockPanel.Dock="Right" Style="{StaticResource SegmentBox}">
+                <StackPanel x:Name="LevelPicker" Orientation="Horizontal" />
+              </Border>
+              <StackPanel VerticalAlignment="Center" Margin="0,0,20,0">
+                <TextBlock Text="Your level" Style="{StaticResource PanelTitle}" Margin="0,0,0,4" />
+                <TextBlock Style="{StaticResource MutedText}" FontSize="13"
+                           Text="Shots at your level have an orange edge. Click any shot to play it next." />
+              </StackPanel>
+            </DockPanel>
+            <Border Height="1" Background="{StaticResource Line}" Margin="0,16,0,16" />
+            <DockPanel>
+              <CheckBox x:Name="Adaptive" DockPanel.Dock="Right" Style="{StaticResource Switch}" Click="OnSwitch" Tag="adaptive" VerticalAlignment="Center"
+                        AutomationProperties.Name="Adapt to my level" />
+              <StackPanel Margin="0,0,20,0">
+                <TextBlock Text="Adapt to my level" />
+                <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="0,2,0,0"
+                           Text="The trainer picks the shots for you, mostly ones you make 30 to 70% of the time. Score over 70% at your level and it moves you up, under 30% and it moves you down." />
+              </StackPanel>
+            </DockPanel>
+          </StackPanel>
+        </Border>
+        <TextBlock x:Name="LibraryNote" Style="{StaticResource MutedText}" FontSize="13" Margin="2,14,0,0" Visibility="Collapsed" />
+        <StackPanel x:Name="LibraryList" />
       </StackPanel>
 
       <StackPanel x:Name="ClipsTab" Visibility="Collapsed">

@@ -897,6 +897,8 @@ public partial class MainWindow : Window
         ShotTrainer.ShowSample();
         TrainerNav.IsChecked = true;
         await Save("Shot Trainer running");
+        ShotTrainer.ShowLibrarySample();
+        await Save("Shot Trainer library");
         ShotTrainer.ShowClipsSample();
         await Save("Shot Trainer clips");
         ShotTrainer.ShowStatsSample();

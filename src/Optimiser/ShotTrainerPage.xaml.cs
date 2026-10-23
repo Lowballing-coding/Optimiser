@@ -16,6 +16,12 @@ public partial class ShotTrainerPage : UserControl
     {
         InitializeComponent();
         ShowShots(Training.BuiltInShots);
+        for (var level = 1; level < Training.Levels.Length; level++)
+        {
+            var pick = new RadioButton { Style = (Style)FindResource("Segment"), GroupName = "Level", Content = Training.Levels[level], Tag = level };
+            pick.Checked += OnLevel;
+            LevelPicker.Children.Add(pick);
+        }
         ticker.Tick += (_, _) => OnTick();
         saver.Tick += (_, _) => SaveNow();
         IsVisibleChanged += (_, _) =>
@@ -83,6 +89,9 @@ public partial class ShotTrainerPage : UserControl
         ReplayAll.IsChecked = Training.Flag(s, "replay_all", true);
         InfiniteBoost.IsChecked = Training.Flag(s, "infinite_boost", false);
         AutoDifficulty.IsChecked = Training.Flag(s, "auto_difficulty", false);
+        Adaptive.IsChecked = Training.Flag(s, "adaptive", false);
+        var level = (int)Training.Number(s, "player_level", 2); // the trainer moves it while adapting
+        foreach (RadioButton pick in LevelPicker.Children) pick.IsChecked = (int)pick.Tag == level;
         var shots = s["shots"] as JsonArray;
         foreach (DockPanel row in ShotList.Children)
         {
@@ -181,11 +190,86 @@ public partial class ShotTrainerPage : UserControl
     void OnTab(object sender, RoutedEventArgs e)
     {
         if (StatsTab == null) return; // the first tab is checked while the page loads
-        var tab = sender == ClipsTabButton ? ClipsTab : sender == StatsTabButton ? StatsTab : TrainingTab;
-        foreach (var t in new[] { TrainingTab, ClipsTab, StatsTab }) t.Visibility = t == tab ? Visibility.Visible : Visibility.Collapsed;
+        var tab = sender == ClipsTabButton ? ClipsTab : sender == StatsTabButton ? StatsTab : sender == LibraryTabButton ? LibraryTab : TrainingTab;
+        foreach (var t in new[] { TrainingTab, LibraryTab, ClipsTab, StatsTab }) t.Visibility = t == tab ? Visibility.Visible : Visibility.Collapsed;
         if (tab == ClipsTab) ShowClips();
         else LetGo();
         if (tab == StatsTab && !sample) ShowStats();
+        if (tab == LibraryTab && !sample) ShowLibrary();
+    }
+
+    void ShowLibrary()
+    {
+        var shots = Training.Shots;
+        ShowLibrary(Training.Library(shots), Training.PerShot(Training.Attempts(), shots));
+    }
+
+    // A card per shot, grouped by category in the trainer's order, with Peter's record on each.
+    void ShowLibrary(List<ShotInfo> shots, List<ShotStat> stats)
+    {
+        var level = LevelPicker.Children.Cast<RadioButton>().FirstOrDefault(p => p.IsChecked == true)?.Tag as int? ?? 2;
+        LibraryList.Children.Clear();
+        foreach (var group in shots.GroupBy(s => s.Category))
+        {
+            LibraryList.Children.Add(new TextBlock { Text = group.Key, Style = (Style)FindResource("GroupTitle") });
+            var cards = new WrapPanel();
+            foreach (var shot in group)
+            {
+                var stat = shot.Index < stats.Count ? stats[shot.Index] : null;
+                var body = new StackPanel();
+                var top = new DockPanel();
+                if (shot.Level > 0)
+                {
+                    var badge = new Border { Style = (Style)FindResource("Badge"), Child = new TextBlock { Text = Training.Levels[shot.Level] } };
+                    DockPanel.SetDock(badge, Dock.Right);
+                    top.Children.Add(badge);
+                }
+                top.Children.Add(new TextBlock { Text = shot.Name, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+                body.Children.Add(top);
+                if (shot.About != "")
+                    body.Children.Add(new TextBlock { Text = shot.About, Style = (Style)FindResource("MutedText"), FontSize = 12.5, Margin = new Thickness(0, 6, 0, 0) });
+                body.Children.Add(new TextBlock
+                {
+                    Text = stat?.Info ?? "Not tried yet", FontSize = 12, Margin = new Thickness(0, 10, 0, 0),
+                    Foreground = Paint(stat?.Weakest == true ? "Accent" : "Muted"),
+                });
+                var card = new Button { Style = (Style)FindResource("ShotCard"), Content = body, Tag = shot, MinHeight = 120 };
+                if (shot.Level == level) card.BorderBrush = Paint("Accent");
+                AutomationProperties.SetName(card, $"Play {shot.Name}");
+                card.Click += OnCard;
+                cards.Children.Add(card);
+            }
+            LibraryList.Children.Add(cards);
+        }
+    }
+
+    void OnLevel(object sender, RoutedEventArgs e)
+    {
+        Change(s => s["player_level"] = (int)((RadioButton)sender).Tag);
+        if (LibraryTab.IsVisible && !sample) ShowLibrary();
+    }
+
+    // Plays the shot next. With the trainer closed, only that shot is ticked and training starts.
+    void OnCard(object sender, RoutedEventArgs e)
+    {
+        if (sample || ((Button)sender).Tag is not ShotInfo shot) return;
+        LibraryNote.Visibility = Visibility.Visible;
+        try
+        {
+            if (Training.Running)
+            {
+                Training.Send("play", shot.Index);
+                LibraryNote.Text = $"Up next: {shot.Name}.";
+                return;
+            }
+            if (!Training.Installed) { LibraryNote.Text = $"The shot trainer isn't in {Training.Folder}."; return; }
+            var count = Training.Shots.Length;
+            Change(s => s["shots"] = new JsonArray([.. Enumerable.Range(0, count).Select(i => (JsonNode?)(i == shot.Index))]));
+            ShowSettings(Training.Load());
+            OnStart(sender, e);
+            LibraryNote.Text = $"Starting Rocket League with only {shot.Name} ticked. Tick more on the Training tab.";
+        }
+        catch (Exception ex) { LibraryNote.Text = $"Couldn't reach the trainer: {ex.Message}"; }
     }
 
     void ShowStats()
@@ -625,6 +709,21 @@ public partial class ShotTrainerPage : UserControl
     }
 
     Brush Paint(string name) => (Brush)FindResource(name);
+
+    // The Library tab with made-up shot details and a level picked.
+    public void ShowLibrarySample()
+    {
+        sample = true;
+        LibraryTabButton.IsChecked = true;
+        string[] categories = ["Shooting", "Aerials & Reads", "Defense"];
+        var shots = Training.BuiltInShots;
+        List<ShotInfo> library = [.. shots.Select((name, i) => new ShotInfo(i, name, categories[Math.Min(2, i / 5)], 1 + i % 4,
+            "Read the ball off the wall, get there early and put it in the open corner."))];
+        foreach (RadioButton pick in LevelPicker.Children) pick.IsChecked = (int)pick.Tag == 2;
+        var at = new DateTime(2026, 10, 21, 20, 10, 0);
+        List<Attempt> all = [.. Enumerable.Range(0, 60).Select(i => new Attempt(at.AddMinutes(i / 3.0), "a", shots[i * 7 % shots.Length], i % 5 != i % 3))];
+        ShowLibrary(library, Training.PerShot(all, shots));
+    }
 
     // The Stats tab with a made-up history.
     public void ShowStatsSample()

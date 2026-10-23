@@ -55,6 +55,25 @@ public static class Training
         "14. Backboard read", "15. Flip reset setup",
     ];
 
+    public static readonly string[] Levels = ["", "Silver / Gold", "Gold / Plat", "Plat / Diamond", "Diamond+"];
+
+    // The Library's cards: shot_info.json, which the trainer writes beside shots.json, says each shot's category, level
+    // (1 to 4, as Levels) and what to do. A shot it doesn't describe still gets a card, under "Shots".
+    public static List<ShotInfo> Library(string[] shots)
+    {
+        Dictionary<string, JsonObject> about = [];
+        try
+        {
+            if (JsonNode.Parse(File.ReadAllText(Path.Combine(Folder, "shot_info.json"))) is JsonArray all)
+                foreach (var j in all.OfType<JsonObject>())
+                    if (j["name"]?.ToString() is { } name) about[name] = j;
+        }
+        catch { } // an older trainer without it, or half-written
+        return [.. shots.Select((name, i) => about.TryGetValue(name, out var j)
+            ? new ShotInfo(i, name, j["category"]?.ToString() ?? "Shots", Math.Clamp((int)Number(j, "level", 0), 0, 4), j["about"]?.ToString() ?? "")
+            : new ShotInfo(i, name, "Shots", 0, ""))];
+    }
+
     // stats.jsonl: one line per attempt, written by the trainer as each shot ends. Bad lines are skipped.
     public static List<Attempt> Attempts()
     {
@@ -279,11 +298,13 @@ public static class Training
             FileSystem.DeleteFile(file, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
     }
 
-    // "retry", "next" or "save" (a clip). The trainer acts when cmd_id changes, so the same command can be sent twice in a row.
-    public static void Send(string command)
+    // "retry", "next", "save" (a clip) or "play" (shot, from 0, next). The trainer acts when cmd_id changes, so the same
+    // command can be sent twice in a row.
+    public static void Send(string command, int? shot = null)
     {
         var s = Load();
         s["cmd"] = command;
+        if (shot != null) s["cmd_shot"] = shot;
         s["cmd_id"] = (int)Number(s, "cmd_id", 0) + 1;
         Save(s);
     }
@@ -463,6 +484,8 @@ public record ClipEvents(double Length, double[] Touches, double? Goal, double? 
 
     public (double In, double Out)? GoalOnly() => Goal is double g ? (Math.Max(0, g - 5), Math.Min(Length, g + 2)) : null;
 }
+
+public record ShotInfo(int Index, string Name, string Category, int Level, string About);
 
 public record Attempt(DateTime Time, string Session, string Shot, bool Ok);
 
