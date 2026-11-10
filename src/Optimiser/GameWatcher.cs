@@ -17,7 +17,7 @@ public sealed class GameWatcher : IDisposable
 {
     public const string PowerModeSetting = "GamingPowerMode", PrioritySetting = "GamingPriority",
         NoThrottleSetting = "GamingNoThrottle", GpuSetting = "GamingGpuPreference", SavedPowerMode = "PowerModeBeforeGaming",
-        ModeSetting = "GamingProfileMode", OldEnabledSetting = "GamingProfile";
+        ModeSetting = "GamingProfileMode", OldEnabledSetting = "GamingProfile", DesktopHzSetting = "LowRefreshOnDesktop";
     public const string GpuPreferences = @"HKEY_CURRENT_USER\Software\Microsoft\DirectX\UserGpuPreferences";
     static readonly Guid BestPerformance = new("ded574b5-45a0-4f42-8737-46345c09c238");
 
@@ -27,9 +27,11 @@ public sealed class GameWatcher : IDisposable
     readonly Dictionary<uint, Game> running = [];  // games getting the gaming profile; empty in Off mode
     readonly Dictionary<uint, Game> playing = [];  // every game on the list that's running, under the running lock
     readonly object switching = new();
+    static readonly object rates = new();
     List<Game> games = [];
     volatile ProfileMode mode;
     bool profileOn; // under the running lock
+    bool ratesReady, fullRate; // under the running lock
 
     public event Action? Changed;            // a game started or stopped
     public event Action<string>? Warning;     // something went wrong, worth a tray notification
@@ -136,6 +138,7 @@ public sealed class GameWatcher : IDisposable
                 profile = mode != ProfileMode.Off && Optimiser.Games.ProfileOn(game) && running.TryAdd(pid, game);
                 if (!isNew && !profile) return; // already known
                 if (profile) Sync();
+                else SyncRates();
             }
             if (profile)
             {
@@ -155,6 +158,12 @@ public sealed class GameWatcher : IDisposable
     {
         foreach (var p in Process.GetProcesses())
             using (p) OnStart((uint)p.Id);
+        lock (running)
+        {
+            ratesReady = true;
+            fullRate = profileOn || playing.Count > 0;
+        }
+        ApplyRates();
     }
 
     void OnStop(uint pid)
@@ -165,6 +174,7 @@ public sealed class GameWatcher : IDisposable
             {
                 if (!playing.Remove(pid)) return;
                 if (running.Remove(pid)) Sync();
+                else SyncRates();
             }
         }
         catch (Exception e)
@@ -179,10 +189,55 @@ public sealed class GameWatcher : IDisposable
     void Sync()
     {
         var on = mode == ProfileMode.On || (mode == ProfileMode.Automatic && running.Count > 0);
-        if (on == profileOn) return;
-        profileOn = on;
-        if (on) StartProfile();
-        else RestorePowerMode();
+        if (on != profileOn)
+        {
+            profileOn = on;
+            if (on) StartProfile();
+            else RestorePowerMode();
+        }
+        SyncRates();
+    }
+
+    // Whether the screens should be at their full refresh rate: while any game on the list runs, its own switch on or
+    // not, and whenever the profile is on.
+    public bool FullRate
+    {
+        get { lock (running) return fullRate; }
+    }
+
+    // Under the running lock. Waits for the first check for running games, so starting Optimiser mid-game doesn't
+    // drop the screen to 60 Hz and straight back.
+    void SyncRates()
+    {
+        var full = profileOn || playing.Count > 0;
+        if (!ratesReady || full == fullRate) return;
+        fullRate = full;
+        ThreadPool.QueueUserWorkItem(_ => ApplyRates());
+    }
+
+    // With the refresh rate switch on: full rate for games, the lowest on the desktop, where the GPU's memory can slow
+    // right down. Off the running lock, as Windows tells every window about the change and waits for them.
+    public void ApplyRates()
+    {
+        lock (rates)
+        {
+            try
+            {
+                bool ready, full;
+                lock (running) (ready, full) = (ratesReady, fullRate); // not ready again once closing
+                if (ready && Settings.Get(DesktopHzSetting, false)) Display.Match(full);
+            }
+            catch (Exception e)
+            {
+                Warning?.Invoke($"Couldn't change the screen's refresh rate: {e.Message}");
+            }
+        }
+    }
+
+    // When the switch goes off or Optimiser closes, so games aren't stuck at 60 Hz.
+    public static void FullRates()
+    {
+        lock (rates) Display.Match(gaming: true);
     }
 
     void StartProfile()
@@ -255,7 +310,12 @@ public sealed class GameWatcher : IDisposable
         stops.Stop();
         starts.Dispose();
         stops.Dispose();
-        lock (running) RestorePowerMode();
+        lock (running)
+        {
+            ratesReady = false;
+            RestorePowerMode();
+        }
+        if (Settings.Get(DesktopHzSetting, false)) FullRates();
     }
 
     const uint ProcessSetInformation = 0x0200, ProcessQueryLimited = 0x1000, HighPriorityClass = 0x80;
