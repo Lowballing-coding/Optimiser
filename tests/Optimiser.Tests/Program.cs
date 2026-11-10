@@ -149,13 +149,17 @@ using (var watcher = new GameWatcher(backup) { Games = [new Game("Fake Game", ga
 {
     var changed = new AutoResetEvent(false);
     watcher.Changed += () => changed.Set();
+    watcher.CheckRunning(); // as at startup; the refresh rate follows games from here on
+    Check(!watcher.FullRate, "no game running: the screen can sit at its desktop refresh rate");
     using var game = Process.Start(new ProcessStartInfo(fakeGame, "/c ping -n 30 127.0.0.1") { CreateNoWindow = true, UseShellExecute = false })!;
     Check(changed.WaitOne(15000) && watcher.Running.SequenceEqual(["Fake Game"]), "a game starting switches on the gaming profile");
+    Check(watcher.FullRate, "and the screen's full refresh rate");
     Check(game.PriorityClass == ProcessPriorityClass.High, "the game gets high priority");
     game.Kill(entireProcessTree: true);
     game.WaitForExit();
     Check(changed.WaitOne(15000) && watcher.Running.Count == 0 && !watcher.ProfileOn && Settings.GetText(GameWatcher.SavedPowerMode) == null,
           "the profile switches off and the power mode goes back when the game closes");
+    Check(!watcher.FullRate, "and the desktop refresh rate comes back");
 
     using var again = Process.Start(new ProcessStartInfo(fakeGame, "/c ping -n 30 127.0.0.1") { CreateNoWindow = true, UseShellExecute = false })!;
     Check(changed.WaitOne(15000) && watcher.ProfileOn, "the profile switches on for the game again");
@@ -171,6 +175,7 @@ using (var watcher = new GameWatcher(backup) { Games = [new Game("Fake Game", ga
     {
         Check(changed.WaitOne(15000) && watcher.Playing.ContainsValue(fake) && watcher.Running.Count == 0 && !watcher.ProfileOn,
               "a game with its own switch off is still seen, for its FPS, but gets no profile");
+        Check(watcher.FullRate, "it still gets the full refresh rate");
         unprofiled.Kill(entireProcessTree: true);
         unprofiled.WaitForExit();
     }
@@ -187,6 +192,11 @@ using (var watcher = new GameWatcher(backup) { Games = [new Game("Fake Game", ga
     Check(watcher.Running.Count == 0 && !watcher.ProfileOn, "but ignores them");
     watcher.Mode = ProfileMode.Automatic;
     Check(watcher.Running.SequenceEqual(["Fake Game"]) && watcher.ProfileOn, "back to Automatic picks up a game that's already running");
+    watcher.Dispose();
+    watcher.Mode = ProfileMode.Off;
+    watcher.Mode = ProfileMode.Automatic; // leaving Off rescans, like a scan that finishes after Optimiser closed
+    Check(!watcher.ProfileOn && Settings.GetText(GameWatcher.SavedPowerMode) == null,
+        "once Optimiser is closing, a late rescan doesn't switch the gaming profile back on");
     ignored.Kill(entireProcessTree: true);
     ignored.WaitForExit();
 }
@@ -265,7 +275,8 @@ Check(Overclock.Parse("120,400") == (120, 400) && Overclock.Parse("bad") == null
 Check(NvGpu.Open(out var noGpu) == null && noGpu != null, "no Nvidia GPU explains itself");
 
 // Screens: reading refresh rates works, whatever the runner's screen offers.
-Check(Display.Screens().All(s => s.Hz > 1 && s.Hz <= s.MaxHz), "reads each screen's refresh rate");
+Check(Display.Screens().All(s => s.Hz > 1 && s.MinHz <= s.Hz && s.Hz <= s.MaxHz && (s.MinHz >= 59 || s.MinHz == s.Hz)),
+      "reads each screen's refresh rate, its fastest, and its slowest from 59 Hz up");
 
 // Startup apps: stopping one writes Task Manager's "disabled" flag, and undo takes it away again.
 const string runKey = @"Software\Microsoft\Windows\CurrentVersion\Run";

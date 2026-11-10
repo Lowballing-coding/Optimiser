@@ -2,27 +2,46 @@ using System.Runtime.InteropServices;
 
 namespace Optimiser;
 
-public record Screen(string Device, int Hz, int MaxHz);
+public record Screen(string Device, int Hz, int MaxHz, int MinHz);
 
 // Each screen's refresh rate. Laptops often fall back to 60 Hz after a driver update or on battery.
 public static class Display
 {
-    // Every screen on the desktop, with the highest refresh rate it offers at its current resolution.
+    // Every screen on the desktop, with the highest and lowest refresh rates it offers at its current resolution. The
+    // lowest skips the 24 to 50 Hz modes TVs list for films, which would make the desktop judder.
     public static List<Screen> Screens()
     {
         var screens = new List<Screen>();
-        var device = new DisplayDevice { cb = Marshal.SizeOf<DisplayDevice>() };
-        for (uint i = 0; EnumDisplayDevices(null, i, ref device, 0); i++, device.cb = Marshal.SizeOf<DisplayDevice>())
+        foreach (var (device, now) in Attached())
         {
-            if ((device.StateFlags & AttachedToDesktop) == 0 || Current(device.DeviceName) is not { } now) continue;
-            var max = now.dmDisplayFrequency;
+            var (max, min) = (now.dmDisplayFrequency, now.dmDisplayFrequency);
             var mode = NewMode();
-            for (var m = 0; EnumDisplaySettings(device.DeviceName, m, ref mode); m++)
+            for (var m = 0; EnumDisplaySettings(device, m, ref mode); m++)
                 if (mode.dmPelsWidth == now.dmPelsWidth && mode.dmPelsHeight == now.dmPelsHeight && mode.dmBitsPerPel == now.dmBitsPerPel)
+                {
                     max = Math.Max(max, mode.dmDisplayFrequency);
-            screens.Add(new(device.DeviceName, now.dmDisplayFrequency, max));
+                    if (mode.dmDisplayFrequency >= 59) min = Math.Min(min, mode.dmDisplayFrequency);
+                }
+            screens.Add(new(device, now.dmDisplayFrequency, max, min));
         }
         return screens;
+    }
+
+    // The fastest screen's rate right now, without listing every mode, so it's cheap enough to read every second.
+    public static int FastestHz() => Attached().Select(a => a.Now.dmDisplayFrequency).DefaultIfEmpty(0).Max();
+
+    static IEnumerable<(string Device, DevMode Now)> Attached()
+    {
+        var device = new DisplayDevice { cb = Marshal.SizeOf<DisplayDevice>() };
+        for (uint i = 0; EnumDisplayDevices(null, i, ref device, 0); i++, device.cb = Marshal.SizeOf<DisplayDevice>())
+            if ((device.StateFlags & AttachedToDesktop) != 0 && Current(device.DeviceName) is { } now) yield return (device.DeviceName, now);
+    }
+
+    // Every screen at its top rate for a game, or its lowest for the desktop.
+    public static void Match(bool gaming)
+    {
+        foreach (var s in Screens())
+            if ((gaming ? s.MaxHz : s.MinHz) is var hz && hz != s.Hz) SetRefreshRate(s.Device, hz);
     }
 
     public static void SetRefreshRate(string device, int hz)

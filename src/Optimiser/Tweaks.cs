@@ -66,6 +66,26 @@ public static class Tweaks
         RefreshRate(backup),
         NvidiaDriver(),
         Background(WhileGaming),
+        new()
+        {
+            Name = "Full refresh rate only while gaming",
+            Group = WhileGaming,
+            Description = "Runs the screen at its lowest refresh rate on the desktop and switches to its fastest while a game "
+                        + "from the Games list runs. The graphics card's memory slows right down at the lower rate, so the "
+                        + "laptop runs cooler and quieter. The screen goes black for a moment at each switch.",
+            AppliesTo = _ => Display.Screens().Any(s => s.MinHz < s.MaxHz),
+            IsOn = () => Settings.Get(GameWatcher.DesktopHzSetting, false),
+            TurnOn = () =>
+            {
+                Settings.Set(GameWatcher.DesktopHzSetting, true);
+                App.Watcher?.ApplyRates();
+            },
+            TurnOff = () =>
+            {
+                Settings.Set(GameWatcher.DesktopHzSetting, false);
+                GameWatcher.FullRates();
+            },
+        },
         SettingSwitch("Best performance power mode", WhileGaming,
             "Switches Windows' power mode to Best performance while a game runs, then puts your usual mode back when it "
             + "closes. Higher clocks while you play, normal battery life the rest of the time.",
@@ -144,7 +164,7 @@ public static class Tweaks
     // Backups page like any other and undo puts each screen back.
     static Optimisation RefreshRate(Backup backup)
     {
-        var slow = Display.Screens().FirstOrDefault(s => s.Hz < s.MaxHz);
+        var slow = Settings.Get(GameWatcher.DesktopHzSetting, false) ? null : Display.Screens().FirstOrDefault(s => s.Hz < s.MaxHz);
         return new()
         {
             Name = RefreshRateName,
@@ -153,7 +173,7 @@ public static class Tweaks
                         + "A higher refresh rate shows more of the frames your GPU draws, so games look smoother and react "
                         + "faster. Windows sometimes drops back to 60 Hz after a driver update.",
             AppliesTo = _ => Display.Screens().Any(s => s.MaxHz > 60),
-            IsOn = () => Display.Screens().All(s => s.Hz >= s.MaxHz),
+            IsOn = () => Settings.Get(GameWatcher.DesktopHzSetting, false) || Display.Screens().All(s => s.Hz >= s.MaxHz),
             UsesBackup = true,
             TurnOn = () =>
             {
