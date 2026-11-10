@@ -192,6 +192,11 @@ using (var watcher = new GameWatcher(backup) { Games = [new Game("Fake Game", ga
     Check(watcher.Running.Count == 0 && !watcher.ProfileOn, "but ignores them");
     watcher.Mode = ProfileMode.Automatic;
     Check(watcher.Running.SequenceEqual(["Fake Game"]) && watcher.ProfileOn, "back to Automatic picks up a game that's already running");
+    watcher.Dispose();
+    watcher.Mode = ProfileMode.Off;
+    watcher.Mode = ProfileMode.Automatic; // leaving Off rescans, like a scan that finishes after Optimiser closed
+    Check(!watcher.ProfileOn && Settings.GetText(GameWatcher.SavedPowerMode) == null,
+        "once Optimiser is closing, a late rescan doesn't switch the gaming profile back on");
     ignored.Kill(entireProcessTree: true);
     ignored.WaitForExit();
 }

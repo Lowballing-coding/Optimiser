@@ -31,7 +31,7 @@ public sealed class GameWatcher : IDisposable
     List<Game> games = [];
     volatile ProfileMode mode;
     bool profileOn; // under the running lock
-    bool ratesReady, fullRate; // under the running lock
+    bool ratesReady, fullRate, disposed; // under the running lock
 
     public event Action? Changed;            // a game started or stopped
     public event Action<string>? Warning;     // something went wrong, worth a tray notification
@@ -160,6 +160,7 @@ public sealed class GameWatcher : IDisposable
             using (p) OnStart((uint)p.Id);
         lock (running)
         {
+            if (disposed) return;
             ratesReady = true;
             fullRate = profileOn || playing.Count > 0;
         }
@@ -188,6 +189,7 @@ public sealed class GameWatcher : IDisposable
     // game runs. The same lock as the count, so a game starting as another closes can't leave it stuck on.
     void Sync()
     {
+        if (disposed) return; // a late scan or game start mustn't undo what closing put back
         var on = mode == ProfileMode.On || (mode == ProfileMode.Automatic && running.Count > 0);
         if (on != profileOn)
         {
@@ -306,15 +308,18 @@ public sealed class GameWatcher : IDisposable
 
     public void Dispose()
     {
+        lock (running)
+        {
+            if (disposed) return;
+            disposed = true;
+            ratesReady = false;
+            profileOn = false;
+            RestorePowerMode();
+        }
         starts.Stop();
         stops.Stop();
         starts.Dispose();
         stops.Dispose();
-        lock (running)
-        {
-            ratesReady = false;
-            RestorePowerMode();
-        }
         if (Settings.Get(DesktopHzSetting, false)) FullRates();
     }
 

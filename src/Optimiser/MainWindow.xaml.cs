@@ -70,7 +70,7 @@ public partial class MainWindow : Window
     double cpuPeakGhz; // ponytail: the meter runs to the highest seen since the page opened; no API gives the turbo ceiling
     readonly Queue<double> gpuLoads = new(); // the last 5 s, so the bottleneck note doesn't flicker
     FpsSession? picked; // a past session picked in Recent sessions; null shows the game being played, or the last one
-    int refreshRate;    // the fastest screen's, for the FPS tile's meter
+    int refreshRate;    // the fastest screen's now, for the FPS tile's meter
 
     public MainWindow()
     {
@@ -399,7 +399,6 @@ public partial class MainWindow : Window
             foreach (var tile in (first.GpuTemp == null ? [] : gpuTiles).Prepend(fps).Concat(cpuTiles).Append(ram).Append(power)
                          .OrderBy(t => StatTile.Rank(t.Label, order)))
                 Tiles.Children.Add(tile);
-            refreshRate = Display.Screens().Select(s => s.Hz).DefaultIfEmpty(0).Max();
             StatsIntro.Text = (first.GpuTemp == null
                 ? "Live readings, updated every second. No Nvidia graphics driver was found, so there are no GPU readings."
                 : "Live readings, updated every second. Reading the RTX GPU keeps it awake, so Optimiser only reads it while this page is open.")
@@ -407,6 +406,7 @@ public partial class MainWindow : Window
         }
 
         var r = stats.Read();
+        refreshRate = Display.FastestHz(); // changes with each game when the screen drops to 60 Hz on the desktop
         if (r.GpuTemp is { } t)
             gpuTemp.Show($"{t:0}", "°C", t / 100, t >= 87 ? "Hot. The GPU slows itself down at around 87 °C." : null, t);
         var live = Fps.Now();
