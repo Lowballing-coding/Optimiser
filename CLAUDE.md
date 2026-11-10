@@ -25,3 +25,7 @@ Don't call a change done until CI is green and, for UI changes, you've looked at
 - The app runs as administrator. Be conservative with anything that writes to the registry, services, power plans or the GPU.
 - Commit and PR titles are short, plain-English descriptions of what changed for the user, prefixed by the area when it fits (`Shot Trainer: ...`, `Clips: ...`). British English in the UI.
 - Update the README when a feature visible to the user changes.
+
+## Keeping this file current
+
+When a session teaches you something lasting about this repo (a rule Peter stated or corrected, a gotcha, a needed check), add it here in the same PR as the work, and fix any line here that turned out to be wrong. Skip one-off details and anything secret.
