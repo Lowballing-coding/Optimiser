@@ -418,9 +418,15 @@
           <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
             <StackPanel>
               <DockPanel Margin="0,0,0,4">
-                <Border x:Name="FpsLive" DockPanel.Dock="Right" Style="{StaticResource Badge}" Visibility="Collapsed">
-                  <TextBlock Text="Recording" Foreground="{StaticResource Good}" />
-                </Border>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
+                            ToolTip="A small panel in the top-right corner of the game with its FPS, average, 1% low, CPU speed, GPU load and temperature, and a warning when heat holds them back. It's Optimiser's own window on top of the game, so nothing is added to the game itself. If a game in exclusive fullscreen hides it, switch the game to borderless fullscreen.">
+                  <Border x:Name="FpsLive" Style="{StaticResource Badge}" Visibility="Collapsed" Margin="0,0,16,0">
+                    <TextBlock Text="Recording" Foreground="{StaticResource Good}" />
+                  </Border>
+                  <TextBlock Text="Show over games" Style="{StaticResource MutedText}" FontSize="13" VerticalAlignment="Center" Margin="0,0,10,0" />
+                  <CheckBox x:Name="OverlaySwitch" Style="{StaticResource Switch}" Click="OnOverlaySwitch"
+                            AutomationProperties.Name="Show FPS over games" />
+                </StackPanel>
                 <TextBlock Text="Frame rate" Style="{StaticResource PanelTitle}" Margin="0" VerticalAlignment="Center" />
               </DockPanel>
               <TextBlock x:Name="FpsTitle" Style="{StaticResource MutedText}" FontSize="13" />

@@ -83,6 +83,17 @@ using (var stats = new Stats())
 }
 Check(Stats.Limit(0x40) == "Heat" && Stats.Limit(0x80 | 0x4) == "Power brake" && Stats.Limit(0x4 | 0x1) == "Power limit"
       && Stats.Limit(0x1) == "Idle" && Stats.Limit(0) == "Nothing", "what's holding the GPU back, in words, worst first");
+{
+    // The in-game overlay's lines: FPS first, then what's holding the game back.
+    var overlaid = new FpsSession("Game", DateTime.Now, 60, 104.4, 131, 71.2, null, false, [], 1);
+    Reading Hot(ulong limits, double cpuPct) => new(88, 97, 1350, 1800, 115, 125, 6, 8, 72, 18, 32, true, false, 100, limits, cpuPct, 2300, 4);
+    var hotLines = Overlay.Lines(overlaid, 112, Hot(Stats.SwThermalSlowdown, 92));
+    Check(hotLines[0] == ("FPS", "112", false) && hotLines[1].Value == "104" && hotLines[2].Value == "71" && hotLines.Contains(("CPU", "2.1 GHz", false))
+          && hotLines.Contains(("GPU temp", "88 °C", true)) && hotLines.Contains(("", "GPU slowed by heat", true))
+          && hotLines.Contains(("", "CPU held back by heat or power", true)), "the overlay shows FPS, average, 1% low, CPU and GPU, and warns about heat");
+    var fineLines = Overlay.Lines(overlaid, null, Hot(Stats.SwPowerCap, 150) with { GpuTemp = 70 });
+    Check(fineLines[0].Value == "–" && !fineLines.Any(l => l.Warn), "and stays quiet when nothing's holding them back");
+}
 Check(Stats.PowerModeName(4) == "Best performance" && Stats.PowerModeName(5) == "Game Mode" && Stats.PowerModeName(9) == "",
       "Windows' power modes by the names Settings uses");
 
