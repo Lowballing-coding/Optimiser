@@ -10,6 +10,8 @@ Development happens on macOS with no .NET SDK, and the app needs Windows anyway.
 3. CI expects exactly 22 snapshots. Adding or removing a page means updating that count in `build.yml`.
 4. Merging to `main` publishes the `latest` GitHub release. The app's update check reads the release title, and the commit message becomes "What's new".
 
+If a run sits queued and GitHub refuses to cancel it, start a fresh one with `gh api -X POST repos/Lowballing-coding/Optimiser/actions/workflows/build.yml/dispatches -f ref=<branch>`.
+
 Don't call a change done until CI is green and, for UI changes, you've looked at the snapshots.
 
 ## Layout

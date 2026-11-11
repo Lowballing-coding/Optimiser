@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch: # run it by hand, e.g. when a run gets stuck waiting for a runner
 
 permissions:
   contents: write # the "latest" release and the snapshots branch
