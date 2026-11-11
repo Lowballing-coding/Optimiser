@@ -105,6 +105,7 @@ public partial class MainWindow : Window
         App.UpdateChanged += () => ShowUpdate(App.Update);
         ShowUpdate(null);
         statsTimer.Tick += (_, _) => ShowStats();
+        OverlaySwitch.IsChecked = Optimiser.Settings.Get(Overlay.Setting, false);
         statsTimer.Start();
         ShowChanges();
         ShowSessions();
@@ -401,7 +402,7 @@ public partial class MainWindow : Window
                 Tiles.Children.Add(tile);
             StatsIntro.Text = (first.GpuTemp == null
                 ? "Live readings, updated every second. No Nvidia graphics driver was found, so there are no GPU readings."
-                : "Live readings, updated every second. Reading the RTX GPU keeps it awake, so Optimiser only reads it while this page is open.")
+                : "Live readings, updated every second. Reading the RTX GPU keeps it awake, so Optimiser only reads it while this page is open or the in-game overlay is showing.")
                 + " Drag a tile to move it.";
         }
 
@@ -465,6 +466,9 @@ public partial class MainWindow : Window
     }
 
     // The frame rate panel and the FPS tile. Reads nothing from the GPU: the numbers come from the FPS recorder.
+    void OnOverlaySwitch(object sender, RoutedEventArgs e) =>
+        Optimiser.Settings.Set(Overlay.Setting, OverlaySwitch.IsChecked == true); // the next second shows or hides it
+
     void ShowFps((FpsSession Session, double? Current, bool InFront)? live)
     {
         fps.Visibility = live == null ? Visibility.Collapsed : Visibility.Visible;
@@ -843,8 +847,12 @@ public partial class MainWindow : Window
         {
             await Task.Delay(250); // let the page fade in
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
-            var bitmap = new RenderTargetBitmap((int)ActualWidth, (int)ActualHeight, 96, 96, PixelFormats.Pbgra32);
-            bitmap.Render(this);
+            SavePicture(this, name);
+        }
+        void SavePicture(FrameworkElement what, string name)
+        {
+            var bitmap = new RenderTargetBitmap((int)Math.Ceiling(what.ActualWidth), (int)Math.Ceiling(what.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(what);
             var png = new PngBitmapEncoder();
             png.Frames.Add(BitmapFrame.Create(bitmap));
             using var file = File.Create(System.IO.Path.Combine(folder, $"{name}.png"));
@@ -884,6 +892,12 @@ public partial class MainWindow : Window
         UpdateLayout(); // the chart needs its width before it can draw the hover
         FpsChart.Hover(0.62);
         await Save("Stats with a game");
+        var overlay = Overlay.Sample();
+        overlay.Show();
+        await Task.Delay(250);
+        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+        SavePicture((FrameworkElement)overlay.Content, "In-game overlay");
+        overlay.Close();
         ((RadioButton)Nav.Children[1]).IsChecked = true;
         var sample = SetCandidates.ToList();
         SetList.ItemsSource = new[] { new SetRow("Gaming", sample), new SetRow("Everyday", [.. sample.Take(2)]) };

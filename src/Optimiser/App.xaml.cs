@@ -127,7 +127,11 @@ public partial class App : Application
             Rgb.Start(); // puts back the colour picked on the RGB page
             Overclock.Start();
             var everySecond = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            everySecond.Tick += (_, _) => Fps.Tick(); // the frames of a game being played
+            everySecond.Tick += (_, _) =>
+            {
+                Fps.Tick(); // the frames of a game being played
+                Overlay.Tick();
+            };
             everySecond.Start();
             var twiceADay = new DispatcherTimer { Interval = TimeSpan.FromHours(12) };
             twiceADay.Tick += (_, _) => AutoCheck();

@@ -28,7 +28,9 @@ It asks for administrator rights because every tweak changes a system setting.
 
 **Windows settings.** Game Mode on, background game recording off, hardware-accelerated GPU scheduling on, and the telemetry service off.
 
-**Live stats.** GPU temperature, load, clock, power and memory (Nvidia only), CPU load, memory and power source, updated every second. The GPU is only read while the Stats page is open, because reading it keeps a laptop's RTX GPU awake. There's no CPU temperature: reading it needs a third-party kernel driver, which isn't worth the risk for this.
+**Live stats.** GPU temperature, load, clock, power and memory (Nvidia only), CPU load, memory and power source, updated every second. The GPU is only read while the Stats page is open or the in-game overlay is showing, because reading it keeps a laptop's RTX GPU awake. There's no CPU temperature: reading it needs a third-party kernel driver, which isn't worth the risk for this.
+
+**In-game overlay.** Switch on **Show over games** on the Stats page and a small panel sits in the top-right corner while a game from your list is in front: FPS now, average, 1% low, CPU speed, GPU load and temperature, and a warning when heat or the charger is holding the CPU or GPU back. It's Optimiser's own click-through window kept on top, so nothing is added to the game and anti-cheat has nothing to object to. A game in exclusive fullscreen can hide it; borderless fullscreen shows it. On some PCs any window on top of a game makes Windows blend the game's frames with the desktop, which can add a little input lag, so turn it off for competitive play if you notice that.
 
 **RGB.** One page for every RGB app on the PC. Pick a colour and Optimiser shows it on SteelSeries GG (MSI laptop keyboards and SteelSeries gear), Razer Synapse (Razer Chroma, plus anything linked with Chroma Connect, like a Wooting keyboard) and Logitech G HUB, using the ways each app offers other programs, and keeps it there while it runs. **Hand back to each app** puts their own lighting back. Apps without a way in (Wootility, Redragon, iCUE, Armoury Crate and others) get a button that opens them.
 
