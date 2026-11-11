@@ -402,7 +402,7 @@ public partial class MainWindow : Window
                 Tiles.Children.Add(tile);
             StatsIntro.Text = (first.GpuTemp == null
                 ? "Live readings, updated every second. No Nvidia graphics driver was found, so there are no GPU readings."
-                : "Live readings, updated every second. Reading the RTX GPU keeps it awake, so Optimiser only reads it while this page is open.")
+                : "Live readings, updated every second. Reading the RTX GPU keeps it awake, so Optimiser only reads it while this page is open or the in-game overlay is showing.")
                 + " Drag a tile to move it.";
         }
 

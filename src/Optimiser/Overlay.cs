@@ -33,6 +33,7 @@ public sealed class Overlay : Window
             Padding = new(12, 8, 14, 10),
             Child = grid,
         };
+        DpiChanged += (_, _) => Place(GetForegroundWindow()); // moving onto a screen with other scaling resizes it, so place it again
         SourceInitialized += (_, _) =>
         {
             var h = new WindowInteropHelper(this).Handle;
