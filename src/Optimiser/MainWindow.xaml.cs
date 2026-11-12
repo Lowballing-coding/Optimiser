@@ -896,7 +896,7 @@ public partial class MainWindow : Window
         overlay.Show();
         await Task.Delay(250);
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
-        SavePicture((FrameworkElement)overlay.Content, "In-game overlay");
+        SavePicture(overlay, "In-game overlay");
         overlay.Close();
         ((RadioButton)Nav.Children[1]).IsChecked = true;
         var sample = SetCandidates.ToList();

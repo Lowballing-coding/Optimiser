@@ -7,16 +7,28 @@ using System.Windows.Media;
 
 namespace Optimiser;
 
-// A small panel in the top-right corner of the game with its FPS and what's holding it back. It's Optimiser's own window,
+// Stacked bars in the top-right corner of the game, in the style of Rocket League's own performance stats: each bar
+// has a reading and a smaller second line under it, values coloured green, yellow or red. It's Optimiser's own window,
 // kept on top and click-through: nothing is loaded into the game and its process isn't opened, so anti-cheat has nothing
 // to refuse. A game in exclusive fullscreen can draw over it; borderless fullscreen always shows it.
 public sealed class Overlay : Window
 {
     public const string Setting = "FpsOverlay";
+    public enum Tone { Plain, Good, Fair, Bad }
+    public record Bar(string Label, string Value, Tone Tone, string SubLabel = "", string SubValue = "", Tone SubTone = Tone.Plain);
+    // The lowest CPU speed and the highest GPU temperature since the game started, for the bars' second lines.
+    public record Peaks(double? CpuMinGhz, double? GpuMaxTemp);
+
     static Overlay? shown;
     static Stats? stats;
+    static (DateTime Game, double CpuMin, double TempMax) peaks = (default, double.MaxValue, double.MinValue);
 
-    readonly Grid grid = new();
+    static readonly Brush Label = Frozen(0xE8, 0xE8, 0xE8), Good = Frozen(0x8B, 0xE0, 0x4E), Fair = Frozen(0xE8, 0xD8, 0x4A),
+        Bad = Frozen(0xFF, 0x5A, 0x4F);
+    static readonly Brush Shade = Freeze(new LinearGradientBrush(
+        [new(Color.FromArgb(0x00, 0, 0, 0), 0), new(Color.FromArgb(0x8C, 0, 0, 0), 0.35), new(Color.FromArgb(0x99, 0, 0, 0), 1)], 0));
+
+    readonly StackPanel bars = new();
 
     Overlay()
     {
@@ -24,15 +36,7 @@ public sealed class Overlay : Window
         (Topmost, ShowInTaskbar, ShowActivated, Focusable, SizeToContent) = (true, false, false, false, SizeToContent.WidthAndHeight);
         (Left, Top) = (-10000, -10000); // placed in pixels once it has a size
         FontFamily = (FontFamily)Application.Current.Resources["Ui"];
-        grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        Content = new Border
-        {
-            Background = new SolidColorBrush(Color.FromArgb(0xC0, 0x11, 0x13, 0x17)),
-            CornerRadius = new(8),
-            Padding = new(12, 8, 14, 10),
-            Child = grid,
-        };
+        Content = bars;
         DpiChanged += (_, _) => Place(GetForegroundWindow()); // moving onto a screen with other scaling resizes it, so place it again
         SourceInitialized += (_, _) =>
         {
@@ -53,7 +57,12 @@ public sealed class Overlay : Window
             }
             stats ??= new Stats();
             shown ??= new Overlay();
-            shown.Fill(Lines(game.Session, game.Current, stats.Read()));
+            var r = stats.Read();
+            if (peaks.Game != game.Session.Start) peaks = (game.Session.Start, double.MaxValue, double.MinValue);
+            if (Ghz(r) is { } ghz && r.CpuLoad > 0) peaks.CpuMin = Math.Min(peaks.CpuMin, ghz); // 0 = the first, empty reading
+            if (r.GpuTemp is { } t) peaks.TempMax = Math.Max(peaks.TempMax, t);
+            shown.Fill(Bars(game.Session, game.Current, r, new(
+                peaks.CpuMin == double.MaxValue ? null : peaks.CpuMin, peaks.TempMax == double.MinValue ? null : peaks.TempMax)));
             if (!shown.IsVisible) shown.Show();
             shown.Place(GetForegroundWindow());
         }
@@ -68,88 +77,110 @@ public sealed class Overlay : Window
         stats = null;
     }
 
-    // What the panel says: the FPS numbers, the CPU and GPU, and a warning line when heat or power is holding them back.
-    public static List<(string Label, string Value, bool Warn)> Lines(FpsSession s, double? current, Reading r)
+    static double? Ghz(Reading r) => r.CpuPercentOfBase is { } pct && r.CpuBaseMhz is { } mhz ? pct / 100 * mhz / 1000 : null;
+
+    // FPS: green at 100 and up, yellow from 60, red below.
+    static Tone FpsTone(double? fps) => fps switch { null => Tone.Plain, >= 100 => Tone.Good, >= 60 => Tone.Fair, _ => Tone.Bad };
+    // GPU temperature: green below 80 °C, yellow to 87 °C, red from 87 °C, where it starts slowing itself down.
+    static Tone TempTone(double t) => t >= 87 ? Tone.Bad : t >= 80 ? Tone.Fair : Tone.Good;
+
+    // What the bars say: FPS and average, the 1% and 0.1% lows, the CPU speed and its lowest, the GPU's load and clock,
+    // its temperature and highest, and a red bar for each thing heat or power is holding back.
+    public static List<Bar> Bars(FpsSession s, double? current, Reading r, Peaks peaks)
     {
-        var lines = new List<(string, string, bool)>
+        var bars = new List<Bar>
         {
-            ("FPS", FrameStats.Show(current), false),
-            ("Average", FrameStats.Show(s.Average), false),
-            ("1% low", FrameStats.Show(s.Low1), false),
+            new("FPS", FrameStats.Show(current), FpsTone(current), "Avg", FrameStats.Show(s.Average), FpsTone(s.Average)),
+            new("1% low", FrameStats.Show(s.Low1), FpsTone(s.Low1), "0.1%", FrameStats.Show(s.Low01), FpsTone(s.Low01)),
         };
-        var cpuHeld = false;
-        if (r.CpuPercentOfBase is { } pct && r.CpuBaseMhz is { } baseMhz)
+        var held = new List<string>();
+        if (Ghz(r) is { } ghz)
         {
-            lines.Add(("CPU", $"{pct / 100 * baseMhz / 1000:0.0} GHz", false));
-            cpuHeld = r.CpuLoad >= 50 && pct < 100;
+            var slow = r.CpuLoad >= 50 && r.CpuPercentOfBase < 100; // below base speed while busy
+            var baseGhz = r.CpuBaseMhz!.Value / 1000;
+            bars.Add(new("CPU", $"{ghz:0.0} GHz", slow ? Tone.Bad : ghz >= baseGhz ? Tone.Good : Tone.Fair,
+                "Min", peaks.CpuMinGhz is { } min ? $"{min:0.0} GHz" : "–", peaks.CpuMinGhz is { } lowest ? lowest < baseGhz ? Tone.Bad : Tone.Good : Tone.Plain));
+            if (slow) held.Add("CPU held back by heat or power");
         }
-        if (r.GpuLoad is { } load) lines.Add(("GPU", $"{load:0}%", false));
-        if (r.GpuTemp is { } temp) lines.Add(("GPU temp", $"{temp:0} °C", temp >= 87));
-        var gpuHeld = r.GpuLimits is { } g ? Stats.Limit(g) switch
-        {
-            "Heat" => "GPU slowed by heat",
-            "Power brake" => "GPU held back by the charger",
-            "Slowdown" => "GPU slowed down",
-            _ => null,
-        } : null;
-        if (gpuHeld != null) lines.Add(("", gpuHeld, true));
-        if (cpuHeld) lines.Add(("", "CPU held back by heat or power", true));
-        return lines;
+        if (r.GpuLoad is { } load)
+            bars.Add(new("GPU", $"{load:0}%", load >= 90 ? Tone.Good : Tone.Fair,
+                r.GpuClock is { } clock ? "Clock" : "", r.GpuClock is { } c ? $"{c:0} MHz" : "", Tone.Plain));
+        if (r.GpuTemp is { } temp)
+            bars.Add(new("GPU temp", $"{temp:0} °C", TempTone(temp),
+                "Max", peaks.GpuMaxTemp is { } max ? $"{max:0} °C" : "–", peaks.GpuMaxTemp is { } m ? TempTone(m) : Tone.Plain));
+        if (r.GpuLimits is { } g && Stats.Limit(g) switch
+            {
+                "Heat" => "GPU slowed by heat",
+                "Power brake" => "GPU held back by the charger",
+                "Slowdown" => "GPU slowed down",
+                _ => null,
+            } is { } gpuHeld)
+            held.Insert(0, gpuHeld);
+        bars.AddRange(held.Select(h => new Bar("", h, Tone.Bad)));
+        return bars;
     }
 
-    void Fill(List<(string Label, string Value, bool Warn)> lines)
+    void Fill(List<Bar> list)
     {
-        var res = Application.Current.Resources;
-        grid.Children.Clear();
-        grid.RowDefinitions.Clear();
-        for (var i = 0; i < lines.Count; i++)
+        bars.Children.Clear();
+        foreach (var bar in list)
         {
-            var (label, value, warn) = lines[i];
-            grid.RowDefinitions.Add(new() { Height = GridLength.Auto });
-            var first = i == 0;
-            var name = new TextBlock
+            var grid = new Grid { HorizontalAlignment = HorizontalAlignment.Right };
+            grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new() { Width = new(bar.Label == "" ? 0 : 74) }); // values line up from bar to bar
+            Add(grid, bar.Label, Label, 0, 0, 13);
+            Add(grid, bar.Value, Paint(bar.Tone), 0, bar.Label == "" ? 0 : 1, 13);
+            if (bar.SubLabel != "" || bar.SubValue != "")
             {
-                Text = label, FontSize = 12, Foreground = (Brush)res["Muted"],
-                Margin = new(0, 0, 14, 0), VerticalAlignment = VerticalAlignment.Center,
-            };
-            var number = new TextBlock
-            {
-                Text = value, FontSize = first ? 22 : 13, FontWeight = first ? FontWeights.SemiBold : FontWeights.Normal,
-                Foreground = (Brush)res[warn ? "Warn" : first ? "Accent" : "Text"],
-                TextAlignment = TextAlignment.Right, HorizontalAlignment = label == "" ? HorizontalAlignment.Left : HorizontalAlignment.Right,
-            };
-            Typography.SetNumeralAlignment(number, FontNumeralAlignment.Tabular); // numbers don't jitter as they change
-            Grid.SetRow(name, i);
-            Grid.SetRow(number, i);
-            if (label == "") Grid.SetColumnSpan(number, 2); // a warning runs across the panel
-            else
-            {
-                Grid.SetColumn(number, 1);
-                grid.Children.Add(name);
+                grid.RowDefinitions.Add(new() { Height = GridLength.Auto });
+                grid.RowDefinitions.Add(new() { Height = GridLength.Auto });
+                Add(grid, bar.SubLabel, Label, 1, 0, 11.5);
+                Add(grid, bar.SubValue, Paint(bar.SubTone), 1, 1, 11.5);
             }
-            grid.Children.Add(number);
+            bars.Children.Add(new Border
+            {
+                Background = Shade, Width = 230, Margin = new(0, 0, 0, 8), Padding = new(0, 3, 14, 4), Child = grid,
+            });
         }
     }
 
-    // Top-right of the screen the game is on, in pixels, and back on top in case the game pushed it down.
+    static void Add(Grid grid, string text, Brush brush, int row, int column, double size)
+    {
+        var block = new TextBlock
+        {
+            Text = text, Foreground = brush, FontSize = size, Margin = new(column == 0 ? 0 : 6, 0, 0, 0),
+            HorizontalAlignment = column == 0 ? HorizontalAlignment.Right : HorizontalAlignment.Left,
+        };
+        Typography.SetNumeralAlignment(block, FontNumeralAlignment.Tabular); // numbers don't jitter as they change
+        Grid.SetRow(block, row);
+        Grid.SetColumn(block, column);
+        grid.Children.Add(block);
+    }
+
+    static Brush Paint(Tone tone) => tone switch { Tone.Good => Good, Tone.Fair => Fair, Tone.Bad => Bad, _ => Label };
+    static Brush Frozen(byte r, byte g, byte b) => Freeze(new SolidColorBrush(Color.FromRgb(r, g, b)));
+    static Brush Freeze(Brush brush) { brush.Freeze(); return brush; }
+
+    // Flush with the top-right edge of the screen the game is on, in pixels, and back on top in case the game pushed it down.
     void Place(IntPtr game)
     {
         UpdateLayout();
         var screen = System.Windows.Forms.Screen.FromHandle(game).Bounds;
         var dpi = VisualTreeHelper.GetDpi(this);
-        int width = (int)Math.Ceiling(ActualWidth * dpi.DpiScaleX), margin = (int)(16 * dpi.DpiScaleX);
-        SetWindowPos(new WindowInteropHelper(this).Handle, TopmostWindow, screen.Right - width - margin, screen.Top + margin, 0, 0,
+        int width = (int)Math.Ceiling(ActualWidth * dpi.DpiScaleX), top = (int)(14 * dpi.DpiScaleY);
+        SetWindowPos(new WindowInteropHelper(this).Handle, TopmostWindow, screen.Right - width, screen.Top + top, 0, 0,
             NoSize | NoActivateWindow);
     }
 
-    // For the CI snapshot: the panel with made-up numbers, as it shows over a game that's running hot.
+    // For the CI snapshot: the bars with made-up numbers, as they show over a game that's running hot.
     public static Overlay Sample()
     {
         var overlay = new Overlay();
         var session = new FpsSession("Call of Duty", DateTime.Now, 600, 104.4, 131, 71.2, 52.0, true, [], 1);
         var reading = new Reading(88, 97, 1350, 1800, 115, 125, 6.1, 8, 72, 18.3, 32, true, false, 100,
             Stats.SwThermalSlowdown, 92, 2300, 4);
-        overlay.Fill(Lines(session, 112, reading));
+        overlay.Fill(Bars(session, 112, reading, new(1.9, 89)));
+        overlay.Background = new SolidColorBrush(Color.FromRgb(0x2E, 0x5C, 0x7A)); // stands in for the game behind it
         return overlay;
     }
 
