@@ -87,17 +87,19 @@ Check(Stats.Limit(0x40) == "Heat" && Stats.Limit(0x80 | 0x4) == "Power brake" &&
     // The in-game overlay's lines: FPS first, then what's holding the game back.
     var overlaid = new FpsSession("Game", DateTime.Now, 60, 104.4, 131, 71.2, null, false, [], 1);
     Reading Hot(ulong limits, double cpuPct) => new(88, 97, 1350, 1800, 115, 125, 6, 8, 72, 18, 32, true, false, 100, limits, cpuPct, 2300, 4);
-    var hot = Overlay.Bars(overlaid, 112, Hot(Stats.SwThermalSlowdown, 92), new(1.9, 89));
+    var hot = Overlay.Bars(overlaid, 112, Hot(Stats.SwThermalSlowdown, 92), 91, new(89));
     Check(hot[0] == new Overlay.Bar("FPS", "112", Overlay.Tone.Good, "Avg", "104", Overlay.Tone.Good)
           && hot[1] == new Overlay.Bar("1% low", "71", Overlay.Tone.Fair, "0.1%", "–", Overlay.Tone.Plain)
-          && hot.Contains(new("CPU", "2.1 GHz", Overlay.Tone.Bad, "Min", "1.9 GHz", Overlay.Tone.Bad))
-          && hot.Contains(new("GPU temp", "88 °C", Overlay.Tone.Bad, "Max", "89 °C", Overlay.Tone.Bad))
-          && hot.Contains(new("", "GPU slowed by heat", Overlay.Tone.Bad)) && hot.Contains(new("", "CPU held back by heat or power", Overlay.Tone.Bad)),
-        "the overlay's bars show FPS and average, the lows, CPU, GPU and temperature, and red bars for heat");
-    var fine = Overlay.Bars(overlaid, null, Hot(Stats.SwPowerCap, 150) with { GpuTemp = 70 }, new(null, null));
+          && hot.Contains(new("CPU", "72%", Overlay.Tone.Hot, "Temp", "91 °C", Overlay.Tone.Hot))
+          && hot.Contains(new("GPU temp", "88 °C", Overlay.Tone.Hot, "Max", "89 °C", Overlay.Tone.Hot))
+          && hot.Contains(new("", "GPU slowed by heat", Overlay.Tone.Hot)) && hot.Contains(new("", "CPU held back by heat or power", Overlay.Tone.Hot))
+          && !hot.Any(b => b.Value.Contains("GHz")),
+        "the overlay's bars show FPS and average, the lows, CPU usage and temperature, the GPU, and orange for heat");
+    var fine = Overlay.Bars(overlaid, null, Hot(Stats.SwPowerCap, 150) with { GpuTemp = 70 }, null, new(null));
     Check(fine[0].Value == "–" && fine[0].Tone == Overlay.Tone.Plain && !fine.Any(b => b.Label == "")
-          && fine.Contains(new("GPU temp", "70 °C", Overlay.Tone.Good, "Max", "–", Overlay.Tone.Plain)),
-        "and no red bars when nothing's holding them back");
+          && fine.Contains(new("GPU temp", "70 °C", Overlay.Tone.Good, "Max", "–", Overlay.Tone.Plain))
+          && fine.Contains(new("CPU", "72%", Overlay.Tone.Plain)),
+        "and no orange when nothing's holding them back, and no CPU temperature line when Windows has none");
 }
 Check(Stats.PowerModeName(4) == "Best performance" && Stats.PowerModeName(5) == "Game Mode" && Stats.PowerModeName(9) == "",
       "Windows' power modes by the names Settings uses");
