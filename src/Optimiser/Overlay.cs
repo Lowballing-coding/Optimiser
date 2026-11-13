@@ -1,3 +1,4 @@
+using System.Management;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -8,23 +9,25 @@ using System.Windows.Media;
 namespace Optimiser;
 
 // Stacked bars in the top-right corner of the game, in the style of Rocket League's own performance stats: each bar
-// has a reading and a smaller second line under it, values coloured green, yellow or red. It's Optimiser's own window,
+// has a reading and a smaller second line under it, values coloured green, yellow or red, and orange where heat is
+// slowing the CPU or GPU down. It's Optimiser's own window,
 // kept on top and click-through: nothing is loaded into the game and its process isn't opened, so anti-cheat has nothing
 // to refuse. A game in exclusive fullscreen can draw over it; borderless fullscreen always shows it.
 public sealed class Overlay : Window
 {
     public const string Setting = "FpsOverlay";
-    public enum Tone { Plain, Good, Fair, Bad }
+    public enum Tone { Plain, Good, Fair, Bad, Hot }
     public record Bar(string Label, string Value, Tone Tone, string SubLabel = "", string SubValue = "", Tone SubTone = Tone.Plain);
-    // The lowest CPU speed and the highest GPU temperature since the game started, for the bars' second lines.
-    public record Peaks(double? CpuMinGhz, double? GpuMaxTemp);
+    // The highest GPU temperature since the game started, for its bar's second line.
+    public record Peaks(double? GpuMaxTemp);
 
     static Overlay? shown;
     static Stats? stats;
-    static (DateTime Game, double CpuMin, double TempMax) peaks = (default, double.MaxValue, double.MinValue);
+    static (DateTime Game, double TempMax) peaks = (default, double.MinValue);
+    static bool noCpuTemp; // Windows had no thermal zone to read, so stop asking
 
     static readonly Brush Label = Frozen(0xE8, 0xE8, 0xE8), Good = Frozen(0x8B, 0xE0, 0x4E), Fair = Frozen(0xE8, 0xD8, 0x4A),
-        Bad = Frozen(0xFF, 0x5A, 0x4F);
+        Bad = Frozen(0xFF, 0x5A, 0x4F), Hot = Frozen(0xFF, 0x9A, 0x2E);
     static readonly Brush Shade = Freeze(new LinearGradientBrush(
         [new(Color.FromArgb(0x00, 0, 0, 0), 0), new(Color.FromArgb(0x8C, 0, 0, 0), 0.35), new(Color.FromArgb(0x99, 0, 0, 0), 1)], 0));
 
@@ -58,11 +61,9 @@ public sealed class Overlay : Window
             stats ??= new Stats();
             shown ??= new Overlay();
             var r = stats.Read();
-            if (peaks.Game != game.Session.Start) peaks = (game.Session.Start, double.MaxValue, double.MinValue);
-            if (Ghz(r) is { } ghz && r.CpuLoad > 0) peaks.CpuMin = Math.Min(peaks.CpuMin, ghz); // 0 = the first, empty reading
+            if (peaks.Game != game.Session.Start) peaks = (game.Session.Start, double.MinValue);
             if (r.GpuTemp is { } t) peaks.TempMax = Math.Max(peaks.TempMax, t);
-            shown.Fill(Bars(game.Session, game.Current, r, new(
-                peaks.CpuMin == double.MaxValue ? null : peaks.CpuMin, peaks.TempMax == double.MinValue ? null : peaks.TempMax)));
+            shown.Fill(Bars(game.Session, game.Current, r, CpuTemp(), new(peaks.TempMax == double.MinValue ? null : peaks.TempMax)));
             if (!shown.IsVisible) shown.Show();
             shown.Place(GetForegroundWindow());
         }
@@ -77,16 +78,32 @@ public sealed class Overlay : Window
         stats = null;
     }
 
-    static double? Ghz(Reading r) => r.CpuPercentOfBase is { } pct && r.CpuBaseMhz is { } mhz ? pct / 100 * mhz / 1000 : null;
+    // Windows' own reading of the hottest ACPI thermal zone, which on laptops sits by the CPU. A true CPU core reading
+    // needs a third-party kernel driver, which isn't worth the risk. Null when there's no zone or it reads nonsense.
+    static double? CpuTemp()
+    {
+        if (noCpuTemp) return null;
+        try
+        {
+            using var search = new ManagementObjectSearcher(@"root\WMI", "SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature");
+            var hottest = search.Get().Cast<ManagementObject>().Select(z => Convert.ToDouble(z["CurrentTemperature"]) / 10 - 273.15)
+                .Where(c => c is > 15 and < 115).DefaultIfEmpty(double.NaN).Max();
+            if (!double.IsNaN(hottest)) return hottest;
+        }
+        catch (ManagementException) { }
+        noCpuTemp = true;
+        return null;
+    }
 
     // FPS: green at 100 and up, yellow from 60, red below.
     static Tone FpsTone(double? fps) => fps switch { null => Tone.Plain, >= 100 => Tone.Good, >= 60 => Tone.Fair, _ => Tone.Bad };
-    // GPU temperature: green below 80 °C, yellow to 87 °C, red from 87 °C, where it starts slowing itself down.
-    static Tone TempTone(double t) => t >= 87 ? Tone.Bad : t >= 80 ? Tone.Fair : Tone.Good;
+    // Temperatures: green below 80 °C, yellow to 87 °C, orange from 87 °C, where the GPU starts slowing itself down.
+    static Tone TempTone(double t) => t >= 87 ? Tone.Hot : t >= 80 ? Tone.Fair : Tone.Good;
 
-    // What the bars say: FPS and average, the 1% and 0.1% lows, the CPU speed and its lowest, the GPU's load and clock,
-    // its temperature and highest, and a red bar for each thing heat or power is holding back.
-    public static List<Bar> Bars(FpsSession s, double? current, Reading r, Peaks peaks)
+    // What the bars say: FPS and average, the 1% and 0.1% lows, CPU usage and temperature, the GPU's usage and clock,
+    // its temperature and highest, and an orange bar for each thing heat or power is holding back. Whatever heat is
+    // slowing down turns orange.
+    public static List<Bar> Bars(FpsSession s, double? current, Reading r, double? cpuTemp, Peaks peaks)
     {
         var bars = new List<Bar>
         {
@@ -94,29 +111,25 @@ public sealed class Overlay : Window
             new("1% low", FrameStats.Show(s.Low1), FpsTone(s.Low1), "0.1%", FrameStats.Show(s.Low01), FpsTone(s.Low01)),
         };
         var held = new List<string>();
-        if (Ghz(r) is { } ghz)
+        var cpuSlow = r.CpuLoad >= 50 && r.CpuPercentOfBase < 100; // below its base speed while busy
+        bars.Add(new("CPU", $"{r.CpuLoad:0}%", cpuSlow ? Tone.Hot : Tone.Plain,
+            cpuTemp is { } ct ? "Temp" : "", cpuTemp is { } c ? $"{c:0} °C" : "", cpuTemp is { } tt ? TempTone(tt) : Tone.Plain));
+        if (cpuSlow) held.Add("CPU held back by heat or power");
+        var gpuHeld = r.GpuLimits is { } g ? Stats.Limit(g) switch
         {
-            var slow = r.CpuLoad >= 50 && r.CpuPercentOfBase < 100; // below base speed while busy
-            var baseGhz = r.CpuBaseMhz!.Value / 1000;
-            bars.Add(new("CPU", $"{ghz:0.0} GHz", slow ? Tone.Bad : ghz >= baseGhz ? Tone.Good : Tone.Fair,
-                "Min", peaks.CpuMinGhz is { } min ? $"{min:0.0} GHz" : "–", peaks.CpuMinGhz is { } lowest ? lowest < baseGhz ? Tone.Bad : Tone.Good : Tone.Plain));
-            if (slow) held.Add("CPU held back by heat or power");
-        }
+            "Heat" => "GPU slowed by heat",
+            "Power brake" => "GPU held back by the charger",
+            "Slowdown" => "GPU slowed down",
+            _ => null,
+        } : null;
         if (r.GpuLoad is { } load)
-            bars.Add(new("GPU", $"{load:0}%", load >= 90 ? Tone.Good : Tone.Fair,
-                r.GpuClock is { } clock ? "Clock" : "", r.GpuClock is { } c ? $"{c:0} MHz" : "", Tone.Plain));
+            bars.Add(new("GPU", $"{load:0}%", gpuHeld != null ? Tone.Hot : load >= 90 ? Tone.Good : Tone.Fair,
+                r.GpuClock is { } clock ? "Clock" : "", r.GpuClock is { } ck ? $"{ck:0} MHz" : "", gpuHeld != null ? Tone.Hot : Tone.Plain));
         if (r.GpuTemp is { } temp)
             bars.Add(new("GPU temp", $"{temp:0} °C", TempTone(temp),
                 "Max", peaks.GpuMaxTemp is { } max ? $"{max:0} °C" : "–", peaks.GpuMaxTemp is { } m ? TempTone(m) : Tone.Plain));
-        if (r.GpuLimits is { } g && Stats.Limit(g) switch
-            {
-                "Heat" => "GPU slowed by heat",
-                "Power brake" => "GPU held back by the charger",
-                "Slowdown" => "GPU slowed down",
-                _ => null,
-            } is { } gpuHeld)
-            held.Insert(0, gpuHeld);
-        bars.AddRange(held.Select(h => new Bar("", h, Tone.Bad)));
+        if (gpuHeld != null) held.Insert(0, gpuHeld);
+        bars.AddRange(held.Select(h => new Bar("", h, Tone.Hot)));
         return bars;
     }
 
@@ -157,7 +170,7 @@ public sealed class Overlay : Window
         grid.Children.Add(block);
     }
 
-    static Brush Paint(Tone tone) => tone switch { Tone.Good => Good, Tone.Fair => Fair, Tone.Bad => Bad, _ => Label };
+    static Brush Paint(Tone tone) => tone switch { Tone.Good => Good, Tone.Fair => Fair, Tone.Bad => Bad, Tone.Hot => Hot, _ => Label };
     static Brush Frozen(byte r, byte g, byte b) => Freeze(new SolidColorBrush(Color.FromRgb(r, g, b)));
     static Brush Freeze(Brush brush) { brush.Freeze(); return brush; }
 
@@ -179,7 +192,7 @@ public sealed class Overlay : Window
         var session = new FpsSession("Call of Duty", DateTime.Now, 600, 104.4, 131, 71.2, 52.0, true, [], 1);
         var reading = new Reading(88, 97, 1350, 1800, 115, 125, 6.1, 8, 72, 18.3, 32, true, false, 100,
             Stats.SwThermalSlowdown, 92, 2300, 4);
-        overlay.Fill(Bars(session, 112, reading, new(1.9, 89)));
+        overlay.Fill(Bars(session, 112, reading, 91, new(89)));
         overlay.Background = new SolidColorBrush(Color.FromRgb(0x2E, 0x5C, 0x7A)); // stands in for the game behind it
         return overlay;
     }
