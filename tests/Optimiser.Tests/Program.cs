@@ -794,16 +794,6 @@ Check(NvidiaDrivers.Find(products, "NVIDIA GeForce RTX 3070 Ti Laptop GPU") == (
       "the GPU is found by name in Nvidia's product list");
 Check(NvidiaDrivers.Version("""{"Success":"1","IDS":[{"downloadInfo":{"Success":"1","Version":"566.36"}}]}""") == "566.36"
       && NvidiaDrivers.Version("""{"Success":"0","IDS":[]}""") == null, "Nvidia's answer gives the newest version");
-// ponytail: temporary, checks the live lookup once in CI; removed before merging.
-try
-{
-    var xml = await new System.Net.Http.HttpClient().GetStringAsync("https://www.nvidia.com/Download/API/lookupValueSearch.aspx?TypeID=3");
-    Console.WriteLine($"LIVE products: {xml.Length} chars, start {xml[..Math.Min(300, xml.Length)]}");
-    var liveFound = NvidiaDrivers.Find(xml, "NVIDIA GeForce RTX 3070 Ti Laptop GPU");
-    Console.WriteLine($"LIVE found {liveFound}");
-    Console.WriteLine($"LIVE newest {await NvidiaDrivers.Check("NVIDIA GeForce RTX 3070 Ti Laptop GPU")}");
-}
-catch (Exception ex) { Console.WriteLine($"LIVE failed: {ex}"); }
 
 // Disk cleanup only deletes files really inside the folder, never through a junction.
 var junk = Path.Combine(temp, "Junk");

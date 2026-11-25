@@ -194,25 +194,23 @@ public partial class MainWindow : Window
         if (checkingDriver || App.Hardware is not { NvidiaGpu: not null }) return;
         checkingDriver = true;
         var (_, date, version) = await Task.Run(Hardware.NvidiaDriver); // installed since the last check?
-        App.Hardware = App.Hardware with { NvidiaDriverDate = date, NvidiaDriverVersion = version };
+        if (version != null) App.Hardware = App.Hardware with { NvidiaDriverDate = date, NvidiaDriverVersion = version };
         if (App.Hardware is not { NvidiaGpu: { } gpu, NvidiaDriverVersion: { } installed }) { checkingDriver = false; return; }
-        for (var tries = 0; tries < 3; tries++)
+        string? latest = null;
+        for (var tries = 0; tries < 3 && latest == null; tries++)
         {
-            try
+            try { latest = await NvidiaDrivers.Check(gpu); break; }
+            catch { if (tries < 2) await Task.Delay(TimeSpan.FromMinutes(1)); } // no network yet, or Nvidia's site is down
+        }
+        if (latest != null)
+        {
+            Refresh();
+            _ = ShowHealth();
+            if (NvidiaDrivers.IsNewer(latest, installed) && DateTime.Now - driverToldAt > TimeSpan.FromDays(1))
             {
-                if (await NvidiaDrivers.Check(gpu) is { } latest)
-                {
-                    Refresh();
-                    _ = ShowHealth();
-                    if (NvidiaDrivers.IsNewer(latest, installed) && DateTime.Now - driverToldAt > TimeSpan.FromDays(1))
-                    {
-                        driverToldAt = DateTime.Now;
-                        App.Notify($"Nvidia driver {latest} is out and you have {installed}. Open the NVIDIA App to install it.");
-                    }
-                }
-                break;
+                driverToldAt = DateTime.Now;
+                App.Notify($"Nvidia driver {latest} is out and you have {installed}. Open the NVIDIA App to install it.");
             }
-            catch { await Task.Delay(TimeSpan.FromMinutes(1)); } // no network yet, or Nvidia's site is down
         }
         checkingDriver = false;
     }
