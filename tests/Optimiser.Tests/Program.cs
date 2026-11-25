@@ -739,6 +739,85 @@ Check(Training.Weakest(perfect, 2).SequenceEqual([1, 2]) && !Training.PerShot([.
 Check(Training.BestStreak(attempts) == 2 && Training.LastSession(attempts) is { Attempts.Count: 5 } last && last.Attempts[0].Time.Minute == 2,
       "best streak, and the last session is the latest run's attempts");
 
+// Heat: sensor names, MSI's fan readings, and the fans-lagging warning.
+Check(Heat.ZoneName(@"ACPI\ThermalZone\TZ00_0") == "TZ00" && Heat.ZoneName("THRM") == "THRM", "thermal zones by their short names");
+Check(Heat.ParseFans([1, 0x00, 0xB5, 0x00, 0x00, 0, 0, 0, 0]) is [2651, 0] && Heat.ParseFans([0, 1, 2, 3, 4]) == null,
+      "MSI fan readings: 480,000 / reading, a stopped fan is 0, a failed read is nothing");
+Check(Heat.FansLag([(80, 2000), (82, 2000), (84, 2050), (85, 2000), (86, 2000)]) && !Heat.FansLag([(80, 2000), (82, 2400), (84, 2800), (85, 3200), (86, 3600)])
+      && !Heat.FansLag([(60, 0), (62, 0), (64, 0), (65, 0), (66, 0)]), "fans lag when it heats up past 80 °C and they don't speed up");
+Check(Heat.Zones() is var zones && zones.All(z => z.Celsius is > 15 and < 115), "thermal zones read, or none on a VM");
+var (busy, top) = Heat.TopProcesses(TimeSpan.FromMilliseconds(300));
+Check(busy is >= 0 and <= 100 && top.Length <= 5, "the busiest processes over a moment");
+
+// The quiet profile caps turbo boost and puts it back exactly.
+QuietProfile.Cap();
+Check(QuietProfile.Capped, "quiet profile caps boost");
+QuietProfile.Lift();
+Check(!QuietProfile.Capped, "and lifts it, forgetting what it saved");
+
+// Network check numbers.
+Check(Network.Summarise([20, 24, null, 22]) is { Ping: 22, Jitter: 3, Loss: 25 } && Network.Summarise([]) == null
+      && Network.Summarise([null, null]) is { Ping: null, Loss: 100 }, "ping, jitter and loss over the last minute");
+Check(Network.IsHost("1.1.1.1") && Network.IsHost("eu.example.com") && !Network.IsHost("a b") && !Network.IsHost("") && !Network.IsHost("http://x"),
+      "only host names and addresses are accepted to ping");
+
+// Per-game trend: a drop after a driver update is named.
+TrendPoint P(double avg, string driver = "1 Nov", string win = "26100.1") => new("G", DateTime.Now, avg, null, driver, win);
+Check(Fps.Drop([P(100, "20 Nov"), P(140), P(138), P(142)]) is { } dropped && dropped.Contains("driver from 20 Nov") && dropped.StartsWith("29%"),
+      "a drop since a new driver is flagged with it");
+Check(Fps.Drop([P(135), P(140), P(138)]) == null && Fps.Drop([P(100), P(140)]) == null, "no flag for normal wobble or too few sessions");
+Check(Fps.Drop([P(100, win: "26100.2"), P(140), P(138)])!.Contains("Windows"), "or since a Windows update");
+
+// Benchmark: what changed between runs.
+BenchRun Run(params string[] on) => new(DateTime.Now, 100, 100, 100, null, "Finished", on);
+Check(Benchmark.Changes(Run("A", "B"), Run("A", "C")) == "Turned on B, turned off C" && Benchmark.Changes(Run("A"), Run("A")) == "Nothing changed"
+      && Benchmark.Changes(Run(), null) == "First run", "benchmark runs say what changed since the one before");
+Check(Benchmark.Combine(400, 100) == 200 && Benchmark.Combine(0, 150) == 150, "the overall score is the geometric mean, or the CPU's alone");
+
+// Health score.
+var healthy = Health.Items(65, DateTime.Now.AddDays(-30), 3, 400, 1000, 0, false, DateTime.Now);
+var poorly = Health.Items(95, DateTime.Now.AddDays(-400), 15, 50, 1000, 4, false, DateTime.Now);
+Check(Health.Score(healthy) == 100 && Health.Score(poorly) < 20 && Health.Items(null, null, 0, 0, 0, null, false, DateTime.Now).Count == 1,
+      "health score: full marks when all is well, low when not, and only what this PC has counts");
+
+// Disk cleanup only deletes files really inside the folder, never through a junction.
+var junk = Path.Combine(temp, "Junk");
+var outside = Path.Combine(temp, "Outside");
+Directory.CreateDirectory(Path.Combine(junk, "old"));
+Directory.CreateDirectory(outside);
+File.WriteAllText(Path.Combine(junk, "old", "a.tmp"), "x");
+File.WriteAllText(Path.Combine(outside, "keep.txt"), "keep");
+File.SetLastWriteTime(Path.Combine(junk, "old", "a.tmp"), DateTime.Now.AddDays(-30));
+File.SetCreationTime(Path.Combine(junk, "old", "a.tmp"), DateTime.Now.AddDays(-30));
+File.SetLastWriteTime(Path.Combine(outside, "keep.txt"), DateTime.Now.AddDays(-30));
+File.SetCreationTime(Path.Combine(outside, "keep.txt"), DateTime.Now.AddDays(-30));
+Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{Path.Combine(junk, "link")}\" \"{outside}\"") { CreateNoWindow = true })!.WaitForExit();
+var found = Cleanup.Files(junk, DateTime.Now.AddDays(-7)).Select(f => f.Path).ToList();
+Check(found.Count == 1 && found[0].EndsWith("a.tmp"), "cleanup lists old files and doesn't follow a junction");
+Check(Cleanup.Allowed(junk) && !Cleanup.Allowed(Environment.SystemDirectory) && !Cleanup.Allowed(Path.GetDirectoryName(Environment.SystemDirectory)!),
+      "cleanup only works in your profile and known folders, not in Windows itself");
+var junkRoot = new DirectoryInfo(junk).FullName;
+Check(Cleanup.DeleteInside(Path.Combine(junk, "link", "keep.txt"), [junkRoot]) == null && File.Exists(Path.Combine(outside, "keep.txt")),
+      "a file reached through a junction isn't deleted");
+Check(Cleanup.DeleteInside(found[0], [junkRoot]) == 1 && !File.Exists(found[0]), "a file inside is deleted");
+
+// Weekly report and the overlay's layouts and key.
+var week = Report.Lines(DateTime.Now, [new(DateTime.Today, 96)], [new(DateTime.Now, "TZ00", 96, 3, [])],
+    [new("G", DateTime.Now.AddDays(-1), 140, null, "", ""), new("G", DateTime.Now.AddDays(-9), 130, null, "", "")], [], []);
+Check(week[0].StartsWith("Hottest: 96 °C") && week[0].Contains("1 heat spike ") && week[1] == "G: 140 FPS average over 1 session, +8% on the week before.",
+      "the weekly report sums up heat and FPS against the week before");
+Check(Report.Lines(DateTime.Now, [], [], [], [], [])[0].StartsWith("Nothing"), "an empty week says so");
+{
+    var s1 = new FpsSession("Game", DateTime.Now, 60, 104.4, 131, 71.2, null, false, [], 1);
+    var r1 = new Reading(70, 97, 1350, 1800, 115, 125, 6, 8, 72, 18, 32, true, false, 100, 0, 150, 2300, 4);
+    var all = Overlay.Bars(s1, 112, r1, 60, new(70), new(24, 3, 0));
+    Check(all.Contains(new("Ping", "24 ms", Overlay.Tone.Good, "Jitter", "3 ms, 0% lost", Overlay.Tone.Plain))
+          && Overlay.Layout(all, "FPS only").Count == 1 && Overlay.Layout(all, "Compact").Select(b => b.Label).SequenceEqual(["FPS", "1% low", "GPU temp", "Ping"])
+          && Overlay.Layout(all, null).Count == all.Count, "overlay ping bar and layout presets");
+}
+Check(OverlayKey.Name((OverlayKey.Ctrl | OverlayKey.Shift, 0x4F)) == "Ctrl+Shift+O" && OverlayKey.Name((OverlayKey.Alt, 0x31)) == "Alt+1"
+      && OverlayKey.Name((0, 0x79)) == "F10", "overlay key names");
+
 Directory.Delete(temp, true);
 Registry.CurrentUser.DeleteSubKeyTree(sub);
 Console.WriteLine("All checks passed");

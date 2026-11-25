@@ -72,7 +72,8 @@ public static class Tweaks
             Group = WhileGaming,
             Description = "Runs the screen at its lowest refresh rate on the desktop and switches to its fastest while a game "
                         + "from the Games list runs. The graphics card's memory slows right down at the lower rate, so the "
-                        + "laptop runs cooler and quieter. The screen goes black for a moment at each switch.",
+                        + "laptop runs cooler and quieter. The screen goes black for a moment at each switch. If the NVIDIA App "
+                        + "or anything else puts the desktop back on the top rate, Optimiser sets it again within a few seconds.",
             AppliesTo = _ => Display.Screens().Any(s => s.MinHz < s.MaxHz),
             IsOn = () => Settings.Get(GameWatcher.DesktopHzSetting, false),
             TurnOn = () =>

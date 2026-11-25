@@ -1,4 +1,3 @@
-using System.Management;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -24,7 +23,6 @@ public sealed class Overlay : Window
     static Overlay? shown;
     static Stats? stats;
     static (DateTime Game, double TempMax) peaks = (default, double.MinValue);
-    static bool noCpuTemp; // Windows had no thermal zone to read, so stop asking
 
     static readonly Brush Label = Frozen(0xE8, 0xE8, 0xE8), Good = Frozen(0x8B, 0xE0, 0x4E), Fair = Frozen(0xE8, 0xD8, 0x4A),
         Bad = Frozen(0xFF, 0x5A, 0x4F), Hot = Frozen(0xFF, 0x9A, 0x2E);
@@ -63,7 +61,9 @@ public sealed class Overlay : Window
             var r = stats.Read();
             if (peaks.Game != game.Session.Start) peaks = (game.Session.Start, double.MinValue);
             if (r.GpuTemp is { } t) peaks.TempMax = Math.Max(peaks.TempMax, t);
-            shown.Fill(Bars(game.Session, game.Current, r, CpuTemp(), new(peaks.TempMax == double.MinValue ? null : peaks.TempMax)));
+            Network.ForOverlay = true;
+            shown.Fill(Layout(Bars(game.Session, game.Current, r, CpuTemp(), new(peaks.TempMax == double.MinValue ? null : peaks.TempMax), Network.Now()),
+                Settings.GetText(LayoutSetting)));
             if (!shown.IsVisible) shown.Show();
             shown.Place(GetForegroundWindow());
         }
@@ -72,6 +72,7 @@ public sealed class Overlay : Window
 
     static void CloseAll()
     {
+        if (shown != null) Network.ForOverlay = false;
         shown?.Close();
         shown = null;
         stats?.Dispose();
@@ -79,21 +80,8 @@ public sealed class Overlay : Window
     }
 
     // Windows' own reading of the hottest ACPI thermal zone, which on laptops sits by the CPU. A true CPU core reading
-    // needs a third-party kernel driver, which isn't worth the risk. Null when there's no zone or it reads nonsense.
-    static double? CpuTemp()
-    {
-        if (noCpuTemp) return null;
-        try
-        {
-            using var search = new ManagementObjectSearcher(@"root\WMI", "SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature");
-            var hottest = search.Get().Cast<ManagementObject>().Select(z => Convert.ToDouble(z["CurrentTemperature"]) / 10 - 273.15)
-                .Where(c => c is > 15 and < 115).DefaultIfEmpty(double.NaN).Max();
-            if (!double.IsNaN(hottest)) return hottest;
-        }
-        catch (ManagementException) { }
-        noCpuTemp = true;
-        return null;
-    }
+    // needs a third-party kernel driver, which isn't worth the risk.
+    static double? CpuTemp() => Heat.Zones() is { Count: > 0 } zones ? zones.Max(z => z.Celsius) : null;
 
     // FPS: green at 100 and up, yellow from 60, red below.
     static Tone FpsTone(double? fps) => fps switch { null => Tone.Plain, >= 100 => Tone.Good, >= 60 => Tone.Fair, _ => Tone.Bad };
@@ -103,7 +91,7 @@ public sealed class Overlay : Window
     // What the bars say: FPS and average, the 1% and 0.1% lows, CPU usage and temperature, the GPU's usage and clock,
     // its temperature and highest, and an orange bar for each thing heat or power is holding back. Whatever heat is
     // slowing down turns orange.
-    public static List<Bar> Bars(FpsSession s, double? current, Reading r, double? cpuTemp, Peaks peaks)
+    public static List<Bar> Bars(FpsSession s, double? current, Reading r, double? cpuTemp, Peaks peaks, NetStats? net = null)
     {
         var bars = new List<Bar>
         {
@@ -128,10 +116,25 @@ public sealed class Overlay : Window
         if (r.GpuTemp is { } temp)
             bars.Add(new("GPU temp", $"{temp:0} °C", TempTone(temp),
                 "Max", peaks.GpuMaxTemp is { } max ? $"{max:0} °C" : "–", peaks.GpuMaxTemp is { } m ? TempTone(m) : Tone.Plain));
+        if (net is { Ping: { } ping })
+            bars.Add(new("Ping", $"{ping:0} ms", ping < 50 ? Tone.Good : ping < 100 ? Tone.Fair : Tone.Bad,
+                "Jitter", $"{net.Jitter ?? 0:0} ms, {net.Loss:0}% lost", net.Loss > 0 || net.Jitter > 20 ? Tone.Bad : Tone.Plain));
+        else if (net is { Loss: 100 }) bars.Add(new("Ping", "No reply", Tone.Bad));
         if (gpuHeld != null) held.Insert(0, gpuHeld);
         bars.AddRange(held.Select(h => new Bar("", h, Tone.Hot)));
         return bars;
     }
+
+    // Layout presets: Full shows every bar, Compact the ones that matter most mid-match, FPS only just the first.
+    public const string LayoutSetting = "OverlayLayout";
+    public static readonly string[] Layouts = ["Full", "Compact", "FPS only"];
+
+    public static List<Bar> Layout(List<Bar> bars, string? layout) => layout switch
+    {
+        "Compact" => [.. bars.Where(b => b.Label is "FPS" or "1% low" or "GPU temp" or "Ping" or "")],
+        "FPS only" => [.. bars.Take(1)],
+        _ => bars,
+    };
 
     void Fill(List<Bar> list)
     {
@@ -192,7 +195,7 @@ public sealed class Overlay : Window
         var session = new FpsSession("Call of Duty", DateTime.Now, 600, 104.4, 131, 71.2, 52.0, true, [], 1);
         var reading = new Reading(88, 97, 1350, 1800, 115, 125, 6.1, 8, 72, 18.3, 32, true, false, 100,
             Stats.SwThermalSlowdown, 92, 2300, 4);
-        overlay.Fill(Bars(session, 112, reading, 91, new(89)));
+        overlay.Fill(Bars(session, 112, reading, 91, new(89), new(24, 3, 0)));
         overlay.Background = new SolidColorBrush(Color.FromRgb(0x2E, 0x5C, 0x7A)); // stands in for the game behind it
         return overlay;
     }
@@ -207,4 +210,38 @@ public sealed class Overlay : Window
     static int GetWindowLong(IntPtr h, int index) => (int)GetWindowLongPtr(h, index);
     static void SetWindowLong(IntPtr h, int index, int value) => SetWindowLongPtr(h, index, value);
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+}
+
+// The key that shows or hides the overlay from inside a game: a Windows hotkey on Optimiser's main window, which works
+// whichever window is in front. Saved as "modifiers,virtual key"; Ctrl+Shift+O until you pick another.
+public static class OverlayKey
+{
+    public const string Setting = "OverlayHotkey";
+    const int Id = 1;
+    public const uint Alt = 1, Ctrl = 2, Shift = 4, NoRepeat = 0x4000;
+    public const int Message = 0x0312; // WM_HOTKEY
+
+    public static (uint Mods, uint Key) Current =>
+        Settings.GetText(Setting)?.Split(',') is [var m, var k] && uint.TryParse(m, out var mods) && uint.TryParse(k, out var key) ? (mods, key) : (Ctrl | Shift, 0x4F);
+
+    // False when another program already has that combination.
+    public static bool Register(IntPtr hwnd, (uint Mods, uint Key) combo)
+    {
+        UnregisterHotKey(hwnd, Id);
+        return RegisterHotKey(hwnd, Id, combo.Mods | NoRepeat, combo.Key);
+    }
+
+    public static string Name((uint Mods, uint Key) combo) =>
+        string.Join("+", new[] { (Ctrl, "Ctrl"), (Alt, "Alt"), (Shift, "Shift") }.Where(m => (combo.Mods & m.Item1) != 0).Select(m => m.Item2)
+            .Append(System.Windows.Input.KeyInterop.KeyFromVirtualKey((int)combo.Key) switch
+            {
+                var k and >= System.Windows.Input.Key.D0 and <= System.Windows.Input.Key.D9 => ((char)('0' + (k - System.Windows.Input.Key.D0))).ToString(),
+                var k => k.ToString(),
+            }));
+
+    // Flips the overlay switch; it shows or hides at the next second.
+    public static void Toggle() => Settings.Set(Overlay.Setting, !Settings.Get(Overlay.Setting, false));
+
+    [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr hwnd, int id, uint modifiers, uint key);
+    [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr hwnd, int id);
 }

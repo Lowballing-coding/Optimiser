@@ -232,6 +232,7 @@
             <RadioButton Style="{StaticResource Nav}" Content="&#xE945;" Tag="Optimisations" Checked="OnNav" />
             <RadioButton Style="{StaticResource Nav}" Content="&#xE7FC;" Tag="Games" Checked="OnNav" />
             <RadioButton Style="{StaticResource Nav}" Content="&#xE9D9;" Tag="Stats" Checked="OnNav" />
+            <RadioButton x:Name="HeatNav" Style="{StaticResource Nav}" Content="&#xE9CA;" Tag="Heat" Checked="OnNav" />
             <RadioButton Style="{StaticResource Nav}" Content="&#xE81C;" Tag="Backups" Checked="OnNav" />
             <RadioButton x:Name="RgbNav" Style="{StaticResource Nav}" Content="&#xE790;" Tag="RGB" Checked="OnNav" />
             <RadioButton x:Name="OverclockNav" Style="{StaticResource Nav}" Content="&#xE950;" Tag="Overclock" Checked="OnNav" />
@@ -311,6 +312,71 @@
                       <TextBlock x:Name="DashGameHint" Style="{StaticResource MutedText}" FontSize="12.5" Margin="0,3,0,0" />
                     </StackPanel>
                   </DockPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
+                <StackPanel>
+                  <DockPanel Margin="0,0,0,14">
+                    <TextBlock x:Name="HealthScore" DockPanel.Dock="Right" FontSize="26" FontWeight="SemiBold" Foreground="{StaticResource Accent}" />
+                    <TextBlock Text="PC health" Style="{StaticResource PanelTitle}" Margin="0" VerticalAlignment="Center" />
+                  </DockPanel>
+                  <ItemsControl x:Name="HealthList">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <DockPanel Margin="0,0,0,10">
+                          <TextBlock DockPanel.Dock="Right" Text="{Binding Score}" Foreground="{StaticResource Muted}" FontSize="12.5" Margin="12,0,0,0" />
+                          <TextBlock DockPanel.Dock="Left" Width="130" Text="{Binding Item.Name}" FontWeight="SemiBold" />
+                          <TextBlock Text="{Binding Item.Detail}" Style="{StaticResource MutedText}" FontSize="12.5" TextWrapping="Wrap" />
+                        </DockPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
+                <StackPanel>
+                  <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="20,0,0,0">
+                      <Button x:Name="ScanButton" Style="{StaticResource SecondaryButton}" Padding="14,6" Content="Look for files" Click="OnScanCleanup" />
+                      <Button x:Name="CleanButton" Style="{StaticResource AccentButton}" Padding="14,6" Margin="10,0,0,0" Content="Delete" Click="OnClean"
+                              Visibility="Collapsed" />
+                    </StackPanel>
+                    <StackPanel>
+                      <TextBlock Text="Disk cleanup" Style="{StaticResource PanelTitle}" Margin="0" />
+                      <TextBlock x:Name="CleanText" Style="{StaticResource MutedText}" FontSize="12.5" Margin="0,4,0,0" TextWrapping="Wrap"
+                                 Text="Finds temp files, old shader caches and leftover driver installers, and shows you the list before anything is deleted." />
+                    </StackPanel>
+                  </DockPanel>
+                  <ItemsControl x:Name="CleanList" Margin="0,12,0,0">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <DockPanel Margin="0,0,0,10">
+                          <CheckBox DockPanel.Dock="Right" Style="{StaticResource Switch}" IsChecked="{Binding Picked}" Margin="16,0,0,0"
+                                    VerticalAlignment="Center" AutomationProperties.Name="{Binding Find.Spot.Name}" />
+                          <StackPanel>
+                            <TextBlock><Run Text="{Binding Find.Spot.Name, Mode=OneWay}" FontWeight="SemiBold" /><Run Text="{Binding Size, Mode=OneWay}" Foreground="{StaticResource Accent}" /></TextBlock>
+                            <TextBlock Text="{Binding Find.Spot.Why}" Style="{StaticResource MutedText}" FontSize="12.5" Margin="0,3,0,0" TextWrapping="Wrap"
+                                       ToolTip="{Binding Folders}" />
+                          </StackPanel>
+                        </DockPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+
+              <Border Style="{StaticResource Panel}" Margin="0,20,0,0">
+                <StackPanel>
+                  <TextBlock Text="This week" Style="{StaticResource PanelTitle}" />
+                  <ItemsControl x:Name="WeekList">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,8" FontSize="13" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
                 </StackPanel>
               </Border>
             </StackPanel>
@@ -458,9 +524,82 @@
             </StackPanel>
           </Border>
 
-          <UniformGrid x:Name="Tiles" Columns="3" Margin="-6,20,-6,0" Background="Transparent"
+          <!-- How the in-game overlay looks, and the key that shows or hides it -->
+          <Border Style="{StaticResource Panel}" Padding="20,16" Margin="0,12,0,0">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
+                <ContentControl x:Name="LayoutPicker" Focusable="False" />
+                <Button x:Name="HotkeyButton" Style="{StaticResource SecondaryButton}" Padding="14,6" Margin="16,0,0,0" Click="OnHotkey"
+                        ToolTip="Press, then press the keys you want" />
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="Overlay layout and key" FontWeight="SemiBold" FontSize="15" />
+                <TextBlock x:Name="HotkeyText" Style="{StaticResource MutedText}" FontSize="13" Margin="0,6,0,0" MaxWidth="560"
+                           HorizontalAlignment="Left" LineHeight="19" />
+              </StackPanel>
+            </DockPanel>
+          </Border>
+
+                    <UniformGrid x:Name="Tiles" Columns="3" Margin="-6,20,-6,0" Background="Transparent"
                        PreviewMouseLeftButtonDown="OnTileDown" MouseMove="OnTileMove"
                        PreviewMouseLeftButtonUp="OnTileUp" LostMouseCapture="OnTileDrop" />
+
+          <!-- Each game's average across its sessions, with a flag when an update made it drop -->
+          <Border x:Name="Trends" Style="{StaticResource Panel}" Margin="0,8,0,0" Visibility="Collapsed">
+            <StackPanel>
+              <TextBlock Text="Each game over time" Style="{StaticResource PanelTitle}" />
+              <ItemsControl x:Name="TrendList">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,0,0,12">
+                      <Canvas DockPanel.Dock="Right" Width="180" Height="30" Margin="20,0,0,0" ClipToBounds="True">
+                        <Polyline Points="{Binding Line}" Stroke="{StaticResource Accent}" StrokeThickness="2" StrokeLineJoin="Round" />
+                      </Canvas>
+                      <TextBlock DockPanel.Dock="Right" Width="140" Text="{Binding Latest}" VerticalAlignment="Center" />
+                      <StackPanel>
+                        <TextBlock Text="{Binding Game}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Flag}" Foreground="{StaticResource Warn}" FontSize="12.5" Margin="0,3,0,0" TextWrapping="Wrap"
+                                   Visibility="{Binding HasFlag, Converter={StaticResource Vis}}" />
+                      </StackPanel>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <!-- Before and after: a fixed 60-second load, scored, with what changed since the run before -->
+          <Border Style="{StaticResource Panel}" Margin="0,8,0,0">
+            <StackPanel>
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="20,0,0,0">
+                  <Button x:Name="BenchButton" Style="{StaticResource AccentButton}" Content="Run benchmark" Click="OnBenchmark"
+                          ToolTip="Takes 60 seconds. Plug in, close games, and expect the fans to get loud." />
+                  <Button x:Name="BenchStop" Style="{StaticResource SecondaryButton}" Content="Stop" Margin="10,0,0,0" Click="OnBenchStop"
+                          Visibility="Collapsed" />
+                </StackPanel>
+                <StackPanel>
+                  <TextBlock Text="Before and after benchmark" Style="{StaticResource PanelTitle}" Margin="0" />
+                  <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="0,6,0,0" MaxWidth="620" HorizontalAlignment="Left" LineHeight="19"
+                             Text="The same 60-second load on the graphics card and every CPU thread each time. Run it, change one optimisation, run it again: the list shows the score and what changed in between. Differences under 3% are normal run-to-run noise." />
+                </StackPanel>
+              </DockPanel>
+              <ProgressBar x:Name="BenchBar" Style="{StaticResource Bar}" Margin="0,14,0,0" Visibility="Collapsed" AutomationProperties.Name="Benchmark" />
+              <TextBlock x:Name="BenchText" Style="{StaticResource MutedText}" FontSize="13" Margin="0,10,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+              <ItemsControl x:Name="BenchList" Margin="0,12,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <DockPanel Margin="0,0,0,10">
+                      <TextBlock DockPanel.Dock="Left" Width="110" Text="{Binding When}" Foreground="{StaticResource Muted}" />
+                      <TextBlock DockPanel.Dock="Left" Width="80" Text="{Binding Score}" FontWeight="SemiBold" />
+                      <TextBlock DockPanel.Dock="Left" Width="70" Text="{Binding Change}" />
+                      <TextBlock Text="{Binding Detail}" Style="{StaticResource MutedText}" FontSize="12.5" TextWrapping="Wrap" />
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
 
           <!-- Past sessions, newest first, to compare before and after a change -->
           <Border x:Name="Sessions" Style="{StaticResource Panel}" Margin="0,8,0,0" Visibility="Collapsed">
@@ -539,6 +678,7 @@
         </Grid>
       </DockPanel>
 
+      <local:HeatPage x:Name="Heat" Visibility="Collapsed" />
       <local:RgbPage x:Name="RGB" Visibility="Collapsed" />
 
       <local:OverclockPage x:Name="Overclock" Visibility="Collapsed" />
@@ -593,6 +733,22 @@
             </DockPanel>
           </Border>
           <ItemsControl x:Name="ProfileSettings" ItemTemplate="{StaticResource RowCard}" />
+
+          <TextBlock Text="Network check" Style="{StaticResource GroupTitle}" />
+          <Border Style="{StaticResource Panel}" Padding="20,16">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
+                <TextBox x:Name="PingHost" Style="{StaticResource Field}" Width="210" MaxLength="253" Tag="1.1.1.1"
+                         AutomationProperties.Name="Address to ping" KeyDown="OnPingHostKey" />
+                <Button Style="{StaticResource AccentButton}" Content="Save" Margin="10,0,0,0" Click="OnSavePingHost" />
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="Where to measure ping" FontWeight="SemiBold" FontSize="15" />
+                <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="0,6,0,0" MaxWidth="620" HorizontalAlignment="Left" LineHeight="19"
+                           Text="Ping, jitter and lost packets show on the overlay and the Stats page. They're only measured, nothing is changed. Epic and Activision don't publish server addresses, so it pings Cloudflare's nearest server unless you type a game server's address here. Leave it empty for the default." />
+              </StackPanel>
+            </DockPanel>
+          </Border>
 
           <TextBlock Style="{StaticResource MutedText}" FontSize="13" Margin="2,16,0,0">
             <Run x:Name="KeysTip" />
