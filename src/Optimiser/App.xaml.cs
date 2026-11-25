@@ -87,6 +87,7 @@ public partial class App : Application
         Updates.CleanUp();
 
         try { GameWatcher.RestorePowerMode(); } catch { } // left on Best performance if Optimiser was closed mid-game
+        try { if (!Settings.Get(QuietProfile.Setting, false)) QuietProfile.Lift(); } catch { } // capped when it closed, then switched off
         try { Etw.Stop(Fps.SessionName); } catch { } // and the frame counter, which Windows keeps running until it's stopped
         try
         {
@@ -126,17 +127,21 @@ public partial class App : Application
         {
             Rgb.Start(); // puts back the colour picked on the RGB page
             Overclock.Start();
+            Heat.Start();
+            var ticks = 0;
             var everySecond = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             everySecond.Tick += (_, _) =>
             {
                 Fps.Tick(); // the frames of a game being played
                 Overlay.Tick();
+                if (++ticks % 5 == 0 && Watcher is { } w) Task.Run(() => KeepDesktopRate(w));
             };
             everySecond.Start();
             var twiceADay = new DispatcherTimer { Interval = TimeSpan.FromHours(12) };
-            twiceADay.Tick += (_, _) => AutoCheck();
+            twiceADay.Tick += (_, _) => { AutoCheck(); WeeklyReport(); };
             twiceADay.Start();
             AutoCheck();
+            WeeklyReport();
         }
 
         // Keeps the installed copy up to date when a newer download is opened.
@@ -221,6 +226,21 @@ public partial class App : Application
         Current.Dispatcher.InvokeAsync(() => OnGamesChanged()); // also when there's no watcher to say so
     });
 
+    // Puts the desktop refresh rate back when something else (usually the NVIDIA App) raised it, and says so once.
+    static bool toldAboutRate;
+    static void KeepDesktopRate(GameWatcher watcher)
+    {
+        try
+        {
+            if (watcher.KeepDesktopRate() is not { } hz || toldAboutRate) return;
+            toldAboutRate = true;
+            var nvidia = System.Diagnostics.Process.GetProcessesByName("NVIDIA app").Length > 0 ? "The NVIDIA App" : "Another program";
+            Current.Dispatcher.InvokeAsync(() => Notify($"{nvidia} put the screen back to {hz} Hz, so Optimiser set the desktop rate again. "
+                + "It goes to full speed by itself when a game starts."));
+        }
+        catch { } // tried again in 5 seconds
+    }
+
     public static async Task CheckForUpdates()
     {
         try
@@ -240,6 +260,12 @@ public partial class App : Application
         if (Update is not { } update || update.Version == toldAbout) return;
         toldAbout = update.Version;
         Notify($"Optimiser {update.Version} is ready to install. Open Settings to update.");
+    }
+
+    static void WeeklyReport()
+    {
+        try { if (Report.Due() is { } report) Notify(report.Length > 250 ? report[..247] + "..." : report); }
+        catch { } // only a nicety
     }
 
     public static void Notify(string message, Forms.ToolTipIcon icon = Forms.ToolTipIcon.Info) =>

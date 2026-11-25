@@ -7,7 +7,7 @@ A personal Windows WPF app (.NET 10, `net10.0-windows`) that tunes Peter's MSI R
 Development happens on macOS with no .NET SDK, and the app needs Windows anyway. GitHub Actions (`.github/workflows/build.yml`, `windows-latest`) is the only way to check a change:
 1. Push a branch and open a PR. CI runs the self-checks, publishes `Optimiser.exe` and runs `Optimiser.exe --snapshot` to take a picture of every page.
 2. The snapshots are force-pushed to the `snapshots` branch. Fetch that branch and look at the PNGs to check UI changes.
-3. CI expects exactly 22 snapshots. Adding or removing a page means updating that count in `build.yml`.
+3. CI expects exactly 26 snapshots. Adding or removing a page means updating that count in `build.yml`.
 4. Merging to `main` publishes the `latest` GitHub release. The app's update check reads the release title, and the commit message becomes "What's new".
 
 If a run sits queued and GitHub refuses to cancel it, start a fresh one with `gh api -X POST repos/Lowballing-coding/Optimiser/actions/workflows/build.yml/dispatches -f ref=<branch>`.
@@ -19,9 +19,12 @@ Don't call a change done until CI is green and, for UI changes, you've looked at
 - `src/Optimiser/`: one project. Pages are `*Page.xaml` with code-behind; system logic lives in plain classes (`Tweaks.cs`, `Backup.cs`, `Display.cs`, `GameWatcher.cs`, `Fps.cs`, `Etw.cs`, ...).
 - `tests/Optimiser.Tests/`: a console self-check program, not a test framework. It uses a throwaway registry key under HKCU and a temp folder. Add checks there for anything that touches the system.
 - WPF projects don't have implicit `System.IO` usings, so add them explicitly.
+- The container can build (not run) the app: `apt-get update && apt-get install -y dotnet-sdk-10.0`, then `dotnet build src/Optimiser -c Release`. That catches compile errors before CI.
+- Anything that deletes files as admin must open each file without following links and check its real path is inside the allowed folder before deleting through that handle (see `Cleanup.DeleteInside`). TEMP and AppData can be pointed anywhere by a normal program.
 
 ## Rules
 
+- Code the ponytail way in every session (Peter, 2026-11-25): smallest working change, reuse what's here, stdlib first, no speculative abstractions, and one self-check for any non-trivial logic. Never at the cost of safety, undo or security.
 - Tweaks must be safe and reversible. Registry changes go through the `Backup` class (`Backup.cs`), which saves the original value first (and can make a restore point) so it can be undone, and the README's "Undoing things" section must stay true.
 - Detect the hardware rather than assuming the GE66, so the app behaves sensibly on other PCs.
 - The app runs as administrator. Be conservative with anything that writes to the registry, services, power plans or the GPU.

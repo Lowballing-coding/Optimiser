@@ -31,6 +31,7 @@ public static class Tweaks
     public const string WindowsSettings = "Windows settings";
     public const string GpuTweakName = "Run games on the dedicated GPU";
     public const string StartupGroup = "Apps that start with Windows";
+    public const string QuietName = "Quiet profile on the desktop";
     const string RefreshRateName = "Full refresh rate", SavedRates = "RefreshRatesBefore";
     const string WindowedGames = "Optimisations for windowed games", DirectXGlobal = "DirectXUserGlobalSettings";
     const string Mouse = @"HKEY_CURRENT_USER\Control Panel\Mouse";
@@ -72,7 +73,8 @@ public static class Tweaks
             Group = WhileGaming,
             Description = "Runs the screen at its lowest refresh rate on the desktop and switches to its fastest while a game "
                         + "from the Games list runs. The graphics card's memory slows right down at the lower rate, so the "
-                        + "laptop runs cooler and quieter. The screen goes black for a moment at each switch.",
+                        + "laptop runs cooler and quieter. The screen goes black for a moment at each switch. If the NVIDIA App "
+                        + "or anything else puts the desktop back on the top rate, Optimiser sets it again within a few seconds.",
             AppliesTo = _ => Display.Screens().Any(s => s.MinHz < s.MaxHz),
             IsOn = () => Settings.Get(GameWatcher.DesktopHzSetting, false),
             TurnOn = () =>
@@ -85,6 +87,18 @@ public static class Tweaks
                 Settings.Set(GameWatcher.DesktopHzSetting, false);
                 GameWatcher.FullRates();
             },
+        },
+        new()
+        {
+            Name = QuietName,
+            Group = WhileGaming,
+            Description = "While no game is running, switches the CPU's turbo boost off and Windows' power mode to Best power "
+                        + "efficiency, so the laptop runs cooler and quieter. Both lift the moment a game from the Games list "
+                        + "starts. The Heat page has it too.",
+            IsOn = () => Settings.Get(QuietProfile.Setting, false),
+            CountsToScore = false,
+            TurnOn = () => QuietProfile.Switch(true),
+            TurnOff = () => QuietProfile.Switch(false),
         },
         SettingSwitch("Best performance power mode", WhileGaming,
             "Switches Windows' power mode to Best performance while a game runs, then puts your usual mode back when it "

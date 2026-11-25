@@ -52,6 +52,45 @@ public record SessionRow(FpsSession Session, FpsSession? Before)
         seconds < 60 ? $"{seconds} s" : seconds < 3600 ? $"{seconds / 60} min" : $"{seconds / 3600} h {seconds / 60 % 60} min";
 }
 
+// One game's line in "Each game over time": its averages oldest to newest as a small chart.
+public record TrendRow(string Game, PointCollection Line, string Latest, string? Flag)
+{
+    public bool HasFlag => Flag != null;
+
+    public static List<TrendRow> From(List<TrendPoint> trend) => [.. trend.GroupBy(t => t.Game).Where(g => g.Count() >= 2).Select(g =>
+    {
+        var newest = g.ToList();
+        var averages = newest.Take(30).Select(t => t.Average).Reverse().ToList();
+        var (low, high) = (averages.Min() * 0.9, averages.Max() * 1.05);
+        var line = new PointCollection(averages.Select((a, i) => new Point(180.0 * i / (averages.Count - 1), 29 - 28 * (a - low) / Math.Max(1, high - low))));
+        return new TrendRow(g.Key, line, $"{newest[0].Average:0} FPS last time", Fps.Drop(newest));
+    })];
+}
+
+// One benchmark run on the Stats page, against the one before it.
+public record BenchRow(BenchRun Run, BenchRun? Before)
+{
+    public string When => $"{Run.At:d MMM HH:mm}";
+    public string Score => $"{Run.Score:N0}";
+    public string Change => Before is { Score: > 0 } b ? $"{(double)Run.Score / b.Score - 1:+0.0%;-0.0%;0%}" : "";
+    public string Detail => $"{Benchmark.Changes(Run, Before)}. GPU {Run.Gpu:N0}, CPU {Run.Cpu:N0}"
+        + (Run.MaxGpuTemp is { } t ? $", up to {t:0} °C" : "") + (Run.Ending == "Finished" ? "." : $". {Run.Ending}.");
+}
+
+public record HealthRow(HealthItem Item)
+{
+    public string Score => $"{Item.Points}/{Item.Max}";
+}
+
+// One place Disk cleanup found files in; Picked says whether Delete includes it.
+public class CleanRow(CleanupFind find)
+{
+    public CleanupFind Find { get; } = find;
+    public bool Picked { get; set; } = find.Bytes > 0;
+    public string Size => $"  {Cleanup.Size(Find.Bytes)}, {Find.Files.Count:N0} file{(Find.Files.Count == 1 ? "" : "s")}";
+    public string Folders => string.Join("\n", Find.Spot.Folders);
+}
+
 public partial class MainWindow : Window
 {
     public const double SidebarOpen = 200; // sidebar width while hovered; 72 when closed
@@ -66,7 +105,8 @@ public partial class MainWindow : Window
     readonly StatTile gpuTemp = new("GPU temperature", showTrend: true), gpuLoad = new("GPU load", showTrend: true),
         gpuClock = new("GPU clock", false), gpuPower = new("GPU power", false), vram = new("Graphics memory", false),
         cpuLoad = new("CPU load", showTrend: true), ram = new("Memory", false), power = new("Power", false),
-        fps = new("FPS", showTrend: true), gpuLimit = new("GPU held back by", false), cpuSpeed = new("CPU speed", false);
+        fps = new("FPS", showTrend: true), gpuLimit = new("GPU held back by", false), cpuSpeed = new("CPU speed", false),
+        pingTile = new("Ping", false);
     double cpuPeakGhz; // ponytail: the meter runs to the highest seen since the page opened; no API gives the turbo ceiling
     readonly Queue<double> gpuLoads = new(); // the last 5 s, so the bottleneck note doesn't flicker
     FpsSession? picked; // a past session picked in Recent sessions; null shows the game being played, or the last one
@@ -84,7 +124,10 @@ public partial class MainWindow : Window
             // A pin made from the window starts this copy. Updates replace it in place, so the pin keeps working.
             try { Taskbar.SetIdentity(new WindowInteropHelper(this).Handle, Environment.ProcessPath!); }
             catch { } // only changes how the taskbar groups the window
-            HwndSource.FromHwnd(new WindowInteropHelper(this).Handle).AddHook(WorkArea.Hook);
+            var source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            source.AddHook(WorkArea.Hook);
+            source.AddHook(OnHotkeyMessage);
+            ShowHotkey(OverlayKey.Register(source.Handle, OverlayKey.Current));
         };
         Loaded += OnLoaded;
         Closed += (_, _) => stats?.Dispose();
@@ -106,6 +149,9 @@ public partial class MainWindow : Window
         ShowUpdate(null);
         statsTimer.Tick += (_, _) => ShowStats();
         OverlaySwitch.IsChecked = Optimiser.Settings.Get(Overlay.Setting, false);
+        LayoutPicker.Content = OverlayLayouts();
+        PingHost.Text = Optimiser.Settings.GetText(Network.HostSetting) ?? "";
+        ShowBenchmarks();
         statsTimer.Start();
         ShowChanges();
         ShowSessions();
@@ -118,6 +164,7 @@ public partial class MainWindow : Window
             App.Hardware = await Task.Run(Hardware.Detect);
             ShowHardware(App.Hardware);
             Refresh();
+            _ = ShowHealth();
         }
         catch (Exception ex)
         {
@@ -129,6 +176,46 @@ public partial class MainWindow : Window
         var args = Environment.GetCommandLineArgs();
         var i = Array.IndexOf(args, "--snapshot");
         if (i >= 0 && i + 1 < args.Length) await Snapshot(args[i + 1]);
+    }
+
+    async Task ShowHealth()
+    {
+        try
+        {
+            var items = await Task.Run(Health.Check);
+            HealthScore.Text = $"{Health.Score(items)}";
+            HealthList.ItemsSource = items.Select(i => new HealthRow(i)).ToList();
+        }
+        catch (Exception ex) { HealthScore.Text = "–"; HealthList.ItemsSource = new[] { new HealthRow(new("Couldn't check", 0, 0, ex.Message)) }; }
+        WeekList.ItemsSource = Report.ThisWeek();
+    }
+
+    async void OnScanCleanup(object sender, RoutedEventArgs e)
+    {
+        ScanButton.IsEnabled = false;
+        CleanText.Text = "Looking…";
+        var finds = await Task.Run(Cleanup.Scan);
+        var rows = finds.Select(f => new CleanRow(f)).ToList();
+        CleanList.ItemsSource = rows;
+        var total = finds.Sum(f => f.Bytes);
+        CleanText.Text = total == 0 ? "Nothing to clean up." : $"Found {Cleanup.Size(total)}. Turn off anything you want to keep, then press Delete.";
+        CleanButton.Visibility = total > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ScanButton.IsEnabled = true;
+    }
+
+    async void OnClean(object sender, RoutedEventArgs e)
+    {
+        if (CleanList.ItemsSource is not List<CleanRow> rows) return;
+        var picked = rows.Where(r => r.Picked).Select(r => r.Find).ToList();
+        if (picked.Count == 0) return;
+        ScanButton.IsEnabled = CleanButton.IsEnabled = false;
+        CleanText.Text = "Deleting…";
+        var freed = await Task.Run(() => Cleanup.Delete(picked));
+        CleanList.ItemsSource = null;
+        CleanButton.Visibility = Visibility.Collapsed;
+        ScanButton.IsEnabled = CleanButton.IsEnabled = true;
+        CleanText.Text = $"Freed {Cleanup.Size(freed)}. Files that were in use were left alone.";
+        _ = ShowHealth();
     }
 
     void ShowHardware(Hardware hw)
@@ -375,6 +462,7 @@ public partial class MainWindow : Window
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
+        if (pickingKey && PickKey(e)) return;
         var pages = NavButtons;
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key - Key.D1 is var n && n >= 0 && n < pages.Length)
         {
@@ -388,7 +476,9 @@ public partial class MainWindow : Window
     // laptop's RTX GPU from going to sleep.
     void ShowStats()
     {
-        if (Stats.Visibility != Visibility.Visible || !IsVisible || WindowState == WindowState.Minimized) return;
+        var onScreen = Stats.Visibility == Visibility.Visible && IsVisible && WindowState != WindowState.Minimized;
+        Network.ForPage = onScreen;
+        if (!onScreen) return;
         if (stats == null)
         {
             stats = new Stats();
@@ -397,7 +487,7 @@ public partial class MainWindow : Window
             if (first.GpuLimits != null) gpuTiles = [.. gpuTiles, gpuLimit];
             var cpuTiles = stats.HasCpuSpeed ? new[] { cpuLoad, cpuSpeed } : [cpuLoad];
             var order = Optimiser.Settings.GetText(TileOrderSetting);
-            foreach (var tile in (first.GpuTemp == null ? [] : gpuTiles).Prepend(fps).Concat(cpuTiles).Append(ram).Append(power)
+            foreach (var tile in (first.GpuTemp == null ? [] : gpuTiles).Prepend(fps).Concat(cpuTiles).Append(ram).Append(power).Append(pingTile)
                          .OrderBy(t => StatTile.Rank(t.Label, order)))
                 Tiles.Children.Add(tile);
             StatsIntro.Text = (first.GpuTemp == null
@@ -441,6 +531,10 @@ public partial class MainWindow : Window
             string.Join(", ", new[] { r.BatteryPercent is { } b ? $"{b}% charged" : "", mode }.Where(x => x != "")),
             r.BatteryPercent / 100.0, r.OnBattery ? "The GPU is held back on battery. Plug in for full performance."
                 : r.PowerMode is 0 or 1 ? "Windows is set to save power, which slows games. Pick Best performance." : null);
+        if (Network.Now() is { } net)
+            pingTile.Show(net.Ping is { } ms ? $"{ms:0}" : "No reply", net.Ping != null ? $"ms to {Network.Host}" : Network.Host,
+                net.Ping / 150, net.Loss > 0 ? $"{net.Loss:0}% of pings lost in the last minute, jitter {net.Jitter ?? 0:0} ms."
+                : net.Jitter > 20 ? $"Jitter {net.Jitter:0} ms: the delay keeps changing, which feels like lag." : $"Jitter {net.Jitter ?? 0:0} ms, nothing lost.");
         ShowFps(live);
     }
 
@@ -502,6 +596,8 @@ public partial class MainWindow : Window
 
     void ShowSessions()
     {
+        TrendList.ItemsSource = TrendRow.From(Fps.Trend());
+        Trends.Visibility = ((List<TrendRow>)TrendList.ItemsSource).Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         var history = Fps.History();
         var rows = history.Select((s, i) => new SessionRow(s, history.Skip(i + 1).FirstOrDefault(b => b.Game == s.Game))).ToList();
         SessionList.ItemsSource = rows;
@@ -518,6 +614,147 @@ public partial class MainWindow : Window
         picked = picked == s ? null : s;
         row.IsChecked = picked != null;
         ShowFps(Fps.Now());
+    }
+
+    // The in-game overlay's layout presets, as a segmented picker like the gaming profile's.
+    FrameworkElement OverlayLayouts()
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        var saved = Optimiser.Settings.GetText(Overlay.LayoutSetting) ?? Overlay.Layouts[0];
+        foreach (var layout in Overlay.Layouts)
+        {
+            var button = new RadioButton { Content = layout, GroupName = "OverlayLayout", IsChecked = layout == saved, Style = (Style)FindResource("Segment") };
+            System.Windows.Automation.AutomationProperties.SetName(button, $"Overlay layout: {layout}");
+            button.Click += (_, _) => Optimiser.Settings.SetText(Overlay.LayoutSetting, layout);
+            row.Children.Add(button);
+        }
+        return new Border { Style = (Style)FindResource("SegmentBox"), Child = row };
+    }
+
+    bool pickingKey;
+
+    void ShowHotkey(bool registered)
+    {
+        var name = OverlayKey.Name(OverlayKey.Current);
+        HotkeyButton.Content = name;
+        HotkeyText.Text = registered
+            ? $"{name} shows or hides the overlay from inside a game. Full shows everything, Compact just FPS, the 1% low, GPU temperature and ping."
+            : $"Another program already uses {name}, so it doesn't show or hide the overlay. Press the button to pick other keys.";
+    }
+
+    void OnHotkey(object sender, RoutedEventArgs e)
+    {
+        if (!pickingKey) HotkeyButton.LostKeyboardFocus += StopPicking;
+        pickingKey = true;
+        HotkeyButton.Content = "Press keys…";
+        HotkeyText.Text = "Hold Ctrl, Alt or Shift and press a key, or press an F key on its own. Esc keeps the one you had.";
+    }
+
+    // Clicking or tabbing away cancels picking, so a later key press in another box isn't taken.
+    void StopPicking(object sender, RoutedEventArgs e)
+    {
+        HotkeyButton.LostKeyboardFocus -= StopPicking;
+        if (!pickingKey) return;
+        pickingKey = false;
+        ShowHotkey(true);
+    }
+
+    // The next key press while picking becomes the overlay key. True when it was used.
+    bool PickKey(KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin) return false;
+        e.Handled = true;
+        pickingKey = false;
+        HotkeyButton.LostKeyboardFocus -= StopPicking;
+        var m = Keyboard.Modifiers;
+        uint mods = (m.HasFlag(ModifierKeys.Control) ? OverlayKey.Ctrl : 0) | (m.HasFlag(ModifierKeys.Alt) ? OverlayKey.Alt : 0)
+                  | (m.HasFlag(ModifierKeys.Shift) ? OverlayKey.Shift : 0);
+        if (key == Key.Escape || (mods == 0 && key is not (>= Key.F1 and <= Key.F24)))
+        {
+            ShowHotkey(OverlayKey.Register(new WindowInteropHelper(this).Handle, OverlayKey.Current));
+            return true;
+        }
+        var combo = (mods, (uint)KeyInterop.VirtualKeyFromKey(key));
+        if (OverlayKey.Register(new WindowInteropHelper(this).Handle, combo))
+        {
+            Optimiser.Settings.SetText(OverlayKey.Setting, $"{combo.mods},{combo.Item2}");
+            ShowHotkey(true);
+        }
+        else
+        {
+            ShowHotkey(OverlayKey.Register(new WindowInteropHelper(this).Handle, OverlayKey.Current));
+            HotkeyText.Text = $"Another program already uses {OverlayKey.Name(combo)}. Try other keys.";
+        }
+        return true;
+    }
+
+    IntPtr OnHotkeyMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg != OverlayKey.Message) return IntPtr.Zero;
+        OverlayKey.Toggle();
+        OverlaySwitch.IsChecked = Optimiser.Settings.Get(Overlay.Setting, false);
+        handled = true;
+        return IntPtr.Zero;
+    }
+
+    void ShowBenchmarks()
+    {
+        var runs = Benchmark.History();
+        BenchList.ItemsSource = runs.Select((r, i) => new BenchRow(r, runs.Skip(i + 1).FirstOrDefault())).ToList();
+    }
+
+    // What's on now, to compare runs by: every switch on the Optimisations page, the power mode and the quiet profile.
+    string[] SwitchesOn()
+    {
+        var on = rows.Where(r => r.IsSwitch && r.On).Select(r => r.Name).ToList();
+        if (QuietProfile.Capped) on.Add("Quiet profile");
+        return [.. on];
+    }
+
+    async void OnBenchmark(object sender, RoutedEventArgs e)
+    {
+        if (Benchmark.Running) return;
+        if (App.Watcher?.Playing.Count > 0)
+        {
+            (BenchText.Text, BenchText.Visibility) = ("Close your game first, or it'll take GPU time from the test.", Visibility.Visible);
+            return;
+        }
+        BenchButton.IsEnabled = false;
+        BenchStop.Visibility = BenchBar.Visibility = BenchText.Visibility = Visibility.Visible;
+        BenchText.Text = "Running. Leave the laptop alone for a minute.";
+        BenchBar.Value = 0;
+        try
+        {
+            var run = await Benchmark.Run(SwitchesOn(), f => Dispatcher.InvokeAsync(() => BenchBar.Value = Math.Min(100, f * 100)));
+            BenchText.Text = run.Ending == "Finished" ? $"Scored {run.Score:N0}." : $"Scored {run.Score:N0}. {run.Ending}.";
+            if (run.Ending.StartsWith("Stopped")) BenchText.Text += " A run that didn't finish isn't kept.";
+        }
+        catch (Exception ex) { BenchText.Text = $"The benchmark couldn't run: {ex.Message}"; }
+        BenchButton.IsEnabled = true;
+        BenchStop.Visibility = BenchBar.Visibility = Visibility.Collapsed;
+        ShowBenchmarks();
+    }
+
+    void OnBenchStop(object sender, RoutedEventArgs e) => Benchmark.Stop();
+
+    void OnSavePingHost(object sender, RoutedEventArgs e)
+    {
+        var host = PingHost.Text.Trim();
+        if (host.Length > 0 && !Network.IsHost(host))
+        {
+            StatusText.Text = $"\"{host}\" isn't an address. Type a name like eu.example.com or a number like 1.1.1.1.";
+            return;
+        }
+        Optimiser.Settings.SetText(Network.HostSetting, host.Length == 0 ? null : host);
+        StatusText.Text = $"Ping now measures to {Network.Host}.";
+    }
+
+    void OnPingHostKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        OnSavePingHost(sender, e);
     }
 
     void ShowGames()
@@ -659,6 +896,8 @@ public partial class MainWindow : Window
                 try { Undo(t); }
                 catch (Exception ex) { failed.Add($"{t} ({ex.Message})"); }
             }
+            try { if (Optimiser.Settings.Get(QuietProfile.Setting, false)) QuietProfile.Switch(false); } // not a registry change, but part of "everything"
+            catch (Exception ex) { failed.Add($"{Tweaks.QuietName} ({ex.Message})"); }
         }, $"Put back the original settings for {tweaks.Count - failed.Count} optimisation{(tweaks.Count == 1 ? "" : "s")}. "
            + "Some only take effect after a restart.");
         if (failed.Count > 0) StatusText.Text += $" These are still changed: {string.Join(", ", failed)}.";
@@ -859,11 +1098,25 @@ public partial class MainWindow : Window
             png.Save(file);
         }
         if (Taskbar.GetId(new WindowInteropHelper(this).Handle) != Taskbar.AppId) Environment.Exit(3); // CI fails the run
+        HealthScore.Text = "72";
+        HealthList.ItemsSource = Health.Items(91, new DateTime(2026, 6, 3), 12, 61, 951, 0, true, new DateTime(2026, 11, 25)).Select(i => new HealthRow(i)).ToList();
+        CleanList.ItemsSource = new List<CleanRow>
+        {
+            new(new(Cleanup.Spots()[0], [.. Enumerable.Repeat("x", 1843)], 2_684_354_560)),
+            new(new(Cleanup.Spots()[1], [.. Enumerable.Repeat("x", 211)], 419_430_400)),
+            new(new(Cleanup.Spots()[2], [], 0)),
+        };
+        (CleanText.Text, CleanButton.Visibility) = ("Found 2.9 GB. Turn off anything you want to keep, then press Delete.", Visibility.Visible);
+        WeekList.ItemsSource = new[] { "Hottest: 96 °C on Monday. 3 heat spikes logged on the Heat page.", "Call of Duty: 141 FPS average over 4 sessions, +6% on the week before.", "Changed: Quiet profile, Game Mode." };
         foreach (var nav in NavButtons)
         {
             nav.IsChecked = true;
             await Save((string)nav.Tag);
         }
+        ((RadioButton)Nav.Children[0]).IsChecked = true;
+        Dashboard.ScrollToEnd();
+        await Save("Dashboard further down");
+        Dashboard.ScrollToHome();
         ShowUpdate(new Release(new Version(1, 0, 99), "", 0, null, "Settings page with update checks\nRemembers where you left the window"));
         await Save("Settings with an update");
         UpdateText.Text = "Downloading Optimiser 1.0.99…";
@@ -889,9 +1142,18 @@ public partial class MainWindow : Window
         SessionList.ItemsSource = new List<SessionRow> { new(played, before), new(before, null) };
         Sessions.Visibility = Visibility.Visible;
         ShowFps((played, 141, true));
+        TrendList.ItemsSource = TrendRow.From([
+            .. new[] { 118.0, 126, 124, 131, 127 }.Select((a, i) => new TrendPoint("Cyberpunk 2077", played.Start.AddDays(-i), a, 80, "3 Nov 2026", "26100.7171")),
+            .. new[] { 96.0, 142, 139, 145, 140, 143 }.Select((a, i) => new TrendPoint("Call of Duty", played.Start.AddDays(-i), a, 70, i == 0 ? "19 Nov 2026" : "3 Nov 2026", "26100.7171"))]);
+        Trends.Visibility = Visibility.Visible;
+        BenchRun bench = new(played.Start, 1904, 2210, 1641, 79, "Finished", ["Game Mode", "Hardware-accelerated GPU scheduling"]);
+        BenchList.ItemsSource = new[] { new BenchRow(bench, bench with { Score = 1851, Gpu = 2150, Cpu = 1594, On = ["Game Mode"] }) };
         UpdateLayout(); // the chart needs its width before it can draw the hover
         FpsChart.Hover(0.62);
         await Save("Stats with a game");
+        Stats.ScrollToEnd();
+        await Save("Stats further down");
+        Stats.ScrollToHome();
         var overlay = Overlay.Sample();
         overlay.Show();
         await Task.Delay(250);
@@ -902,6 +1164,9 @@ public partial class MainWindow : Window
         var sample = SetCandidates.ToList();
         SetList.ItemsSource = new[] { new SetRow("Gaming", sample), new SetRow("Everyday", [.. sample.Take(2)]) };
         await Save("Optimisations with sets");
+        Heat.ShowSample();
+        HeatNav.IsChecked = true;
+        await Save("Heat with a spike");
         RGB.ShowSample();
         RgbNav.IsChecked = true;
         await Save("RGB with apps found");

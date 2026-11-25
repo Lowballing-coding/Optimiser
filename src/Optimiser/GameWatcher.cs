@@ -32,6 +32,7 @@ public sealed class GameWatcher : IDisposable
     volatile ProfileMode mode;
     bool profileOn; // under the running lock
     bool ratesReady, fullRate, disposed; // under the running lock
+    volatile int desktopHz; // the fastest screen's rate after Optimiser last set the desktop rate; 0 while full
 
     public event Action? Changed;            // a game started or stopped
     public event Action<string>? Warning;     // something went wrong, worth a tray notification
@@ -223,17 +224,39 @@ public sealed class GameWatcher : IDisposable
     {
         lock (rates)
         {
+            bool ready, full;
+            lock (running) (ready, full) = (ratesReady, fullRate); // not ready again once closing
+            if (!ready) return;
             try
             {
-                bool ready, full;
-                lock (running) (ready, full) = (ratesReady, fullRate); // not ready again once closing
-                if (ready && Settings.Get(DesktopHzSetting, false)) Display.Match(full);
+                if (Settings.Get(DesktopHzSetting, false))
+                {
+                    Display.Match(full);
+                    desktopHz = full ? 0 : Display.FastestHz();
+                }
             }
-            catch (Exception e)
+            catch (Exception e) { Warning?.Invoke($"Couldn't change the screen's refresh rate: {e.Message}"); }
+            try
             {
-                Warning?.Invoke($"Couldn't change the screen's refresh rate: {e.Message}");
+                if (!Settings.Get(QuietProfile.Setting, false)) return;
+                if (full) QuietProfile.Lift();
+                else QuietProfile.Cap();
             }
+            catch (Exception e) { Warning?.Invoke($"Couldn't switch the quiet profile: {e.Message}"); }
         }
+    }
+
+    // The NVIDIA App puts the screen back on its top rate whenever it opens, and others can too. Every few seconds on the
+    // desktop with the switch on, a rate above the one Optimiser set is put back. Returns the rate it found, if it did.
+    public int? KeepDesktopRate()
+    {
+        bool ready, full;
+        lock (running) (ready, full) = (ratesReady, fullRate);
+        if (!ready || full || desktopHz == 0 || !Settings.Get(DesktopHzSetting, false)) return null;
+        var now = Display.FastestHz();
+        if (now <= desktopHz) return null;
+        ApplyRates();
+        return now;
     }
 
     // When the switch goes off or Optimiser closes, so games aren't stuck at 60 Hz.
@@ -244,6 +267,7 @@ public sealed class GameWatcher : IDisposable
 
     void StartProfile()
     {
+        QuietProfile.Lift(); // first, so the power mode saved below is yours, not the quiet one
         if (Settings.Get(PowerModeSetting, true) && PowerGetEffectiveOverlayScheme(out var current) == 0)
         {
             // Saved, so a crash mid-game still gets it put back on next start.
@@ -321,6 +345,7 @@ public sealed class GameWatcher : IDisposable
         starts.Dispose();
         stops.Dispose();
         if (Settings.Get(DesktopHzSetting, false)) FullRates();
+        QuietProfile.Lift();
     }
 
     const uint ProcessSetInformation = 0x0200, ProcessQueryLimited = 0x1000, HighPriorityClass = 0x80;

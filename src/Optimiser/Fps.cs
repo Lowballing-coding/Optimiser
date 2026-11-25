@@ -10,6 +10,9 @@ namespace Optimiser;
 public record FpsSession(string Game, DateTime Start, int Seconds, double? Average, int? High, double? Low1, double? Low01,
     bool Profile, int[] Chart, int Step);
 
+// A session in the long-term trend: what the game averaged, and the driver and Windows it ran on.
+public record TrendPoint(string Game, DateTime Start, double Average, double? Low1, string Driver, string Windows);
+
 // Records the frame rate of every game on the Games list while it runs, window open or not. Windows logs an event for
 // each frame a program shows (ETW, which PresentMon and CapFrameX read too): nothing is loaded into the game, its process
 // isn't opened and the GPU isn't woken. Frames only count while the game is the window in front. When a game closes,
@@ -145,8 +148,45 @@ public static class Fps
         catch (JsonException) { return []; }
     }
 
-    public static void Save(FpsSession session) =>
+    public static void Save(FpsSession session)
+    {
         Settings.SetText(Setting, JsonSerializer.Serialize<List<FpsSession>>([session, .. History().Take(Keep - 1)]));
+        if (session.Average is { } average)
+            Settings.SetText(TrendSetting, JsonSerializer.Serialize<List<TrendPoint>>(
+                [new(session.Game, session.Start, Math.Round(average, 1), session.Low1 is { } l ? Math.Round(l, 1) : null, Driver(), WindowsBuild()),
+                 .. Trend().Take(KeepTrend - 1)]));
+    }
+
+    // Each session's numbers without its chart, so far more fit: the per-game trend on the Stats page. Newest first.
+    const string TrendSetting = "FpsTrend";
+    public const int KeepTrend = 300;
+
+    public static List<TrendPoint> Trend()
+    {
+        try { return JsonSerializer.Deserialize<List<TrendPoint>>(Settings.GetText(TrendSetting) ?? "[]") ?? []; }
+        catch (JsonException) { return []; }
+    }
+
+    static string Driver() => App.Hardware?.NvidiaDriverDate is { } d ? $"{d:d MMM yyyy}" : "";
+
+    static string WindowsBuild() =>
+        $"{Reg.Read(@"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion", "CurrentBuild")}.{Reg.Read(@"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion", "UBR")}";
+
+    // A drop worth flagging in one game's sessions (newest first): the latest average 10% or more below the middle of
+    // the five before it. Named after a driver or Windows update when one came in between.
+    public static string? Drop(List<TrendPoint> sessions)
+    {
+        if (sessions.Count < 3) return null;
+        var before = sessions.Skip(1).Take(5).Select(s => s.Average).Order().ToList();
+        var usual = before[before.Count / 2];
+        var latest = sessions[0];
+        if (usual <= 0 || latest.Average >= usual * 0.9) return null;
+        var drop = $"{1 - latest.Average / usual:0%} below usual";
+        var last = sessions[1];
+        return latest.Driver != last.Driver && latest.Driver != "" ? $"{drop} since the Nvidia driver from {latest.Driver}."
+             : latest.Windows != last.Windows ? $"{drop} since Windows updated to build {latest.Windows}."
+             : $"{drop} last time.";
+    }
 
     static uint Foreground()
     {
