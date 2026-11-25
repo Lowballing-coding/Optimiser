@@ -80,12 +80,7 @@ public partial class HeatPage : UserControl
     async void OnQuiet(object sender, RoutedEventArgs e)
     {
         var on = QuietSwitch.IsChecked == true;
-        Settings.Set(QuietProfile.Setting, on);
-        await Task.Run(() =>
-        {
-            if (!on) QuietProfile.Lift();
-            else if (App.Watcher is { } w) w.ApplyRates(); // caps now unless a game is running
-        });
+        await Task.Run(() => QuietProfile.Switch(on));
         ShowQuiet();
     }
 

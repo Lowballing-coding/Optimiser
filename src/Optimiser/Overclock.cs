@@ -135,6 +135,7 @@ public static class Overclock
     public static Task<string> Tune(Action<TuneProgress> report)
     {
         if (running != null) throw new InvalidOperationException("A test is already running.");
+        if (Benchmark.Running) throw new InvalidOperationException("The benchmark on the Stats page is running. Try again when it's finished.");
         var cancel = running = new CancellationTokenSource();
         return Task.Run(() =>
         {

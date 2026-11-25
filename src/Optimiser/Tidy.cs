@@ -116,7 +116,7 @@ public static class Cleanup
             var roots = find.Spot.Folders.Where(Allowed).Select(FinalPath).OfType<string>().ToList();
             foreach (var file in find.Files)
                 if (DeleteInside(file, roots) is { } bytes) freed += bytes;
-            foreach (var root in find.Spot.Folders.Where(Directory.Exists)) RemoveEmpty(root);
+            foreach (var root in find.Spot.Folders.Where(Allowed)) RemoveEmpty(root);
         }
         return freed;
     }
@@ -134,6 +134,7 @@ public static class Cleanup
     // Empty folders left after the files went, deepest first. The folder itself stays.
     static void RemoveEmpty(string root)
     {
+        if (new DirectoryInfo(root).Attributes.HasFlag(FileAttributes.ReparsePoint)) return;
         var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
         foreach (var dir in new DirectoryInfo(root).EnumerateDirectories("*", options).Select(d => d.FullName).OrderByDescending(d => d.Length).ToList())
             try { if (!Directory.EnumerateFileSystemEntries(dir).Any()) Directory.Delete(dir); }
@@ -182,7 +183,7 @@ public static class Cleanup
     struct FileInfo
     {
         public uint Attributes;
-        public long Created, Accessed, Written;
+        public uint CreatedLow, CreatedHigh, AccessedLow, AccessedHigh, WrittenLow, WrittenHigh; // FILETIMEs, 4-byte aligned
         public uint Volume, SizeHigh, SizeLow, Links, IndexHigh, IndexLow;
     }
 
@@ -232,8 +233,8 @@ public static class Report
     {
         if (DateTime.TryParse(Settings.GetText(ShownSetting), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var shown)
             && DateTime.Now - shown < TimeSpan.FromDays(7)) return null;
-        Settings.SetText(ShownSetting, DateTime.Now.ToString("o"));
-        if (shown == default) return null; // the first week starts now
-        return "Your weekly report: " + string.Join(" ", ThisWeek().Take(2));
+        var report = shown == default ? null : "Your weekly report: " + string.Join(" ", ThisWeek().Take(2)); // the first week starts now
+        Settings.SetText(ShownSetting, DateTime.Now.ToString("o")); // after, so a report that failed is tried again
+        return report;
     }
 }

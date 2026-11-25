@@ -61,7 +61,7 @@ Every switch saves the original setting before changing it, and turning the swit
 The **Backups** page lists every change with its own Undo button, plus **Undo all changes**.
 A Windows restore point is also made before the first change.
 
-The quiet profile saves the power plan's turbo boost setting and your power mode before changing them, and puts them back when a game starts, when you switch it off and when Optimiser closes (or the next time it starts, after a crash). The "Full refresh rate only while gaming" switch also puts the desktop rate back if the NVIDIA App raises it. Disk cleanup can't be undone, which is why it shows the list first and only deletes old files from those folders.
+The quiet profile isn't a registry change, so it isn't listed on the Backups page. It saves the power plan's turbo boost setting and your power mode before changing them, and puts them back when a game starts, when you switch it off (on the Heat or Optimisations page, or with **Undo all changes**) and when Optimiser closes, or the next time it starts after a crash. The "Full refresh rate only while gaming" switch also puts the desktop rate back if the NVIDIA App raises it. Disk cleanup can't be undone, which is why it shows the list first and only deletes old files from those folders.
 
 Nothing here turns off Defender or Windows Update, "cleans" the registry, overclocks the CPU, or controls the fans.
 

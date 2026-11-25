@@ -644,9 +644,19 @@ public partial class MainWindow : Window
 
     void OnHotkey(object sender, RoutedEventArgs e)
     {
+        if (!pickingKey) HotkeyButton.LostKeyboardFocus += StopPicking;
         pickingKey = true;
         HotkeyButton.Content = "Press keys…";
         HotkeyText.Text = "Hold Ctrl, Alt or Shift and press a key, or press an F key on its own. Esc keeps the one you had.";
+    }
+
+    // Clicking or tabbing away cancels picking, so a later key press in another box isn't taken.
+    void StopPicking(object sender, RoutedEventArgs e)
+    {
+        HotkeyButton.LostKeyboardFocus -= StopPicking;
+        if (!pickingKey) return;
+        pickingKey = false;
+        ShowHotkey(true);
     }
 
     // The next key press while picking becomes the overlay key. True when it was used.
@@ -656,6 +666,7 @@ public partial class MainWindow : Window
         if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin) return false;
         e.Handled = true;
         pickingKey = false;
+        HotkeyButton.LostKeyboardFocus -= StopPicking;
         var m = Keyboard.Modifiers;
         uint mods = (m.HasFlag(ModifierKeys.Control) ? OverlayKey.Ctrl : 0) | (m.HasFlag(ModifierKeys.Alt) ? OverlayKey.Alt : 0)
                   | (m.HasFlag(ModifierKeys.Shift) ? OverlayKey.Shift : 0);
@@ -885,6 +896,8 @@ public partial class MainWindow : Window
                 try { Undo(t); }
                 catch (Exception ex) { failed.Add($"{t} ({ex.Message})"); }
             }
+            try { if (Optimiser.Settings.Get(QuietProfile.Setting, false)) QuietProfile.Switch(false); } // not a registry change, but part of "everything"
+            catch (Exception ex) { failed.Add($"{Tweaks.QuietName} ({ex.Message})"); }
         }, $"Put back the original settings for {tweaks.Count - failed.Count} optimisation{(tweaks.Count == 1 ? "" : "s")}. "
            + "Some only take effect after a restart.");
         if (failed.Count > 0) StatusText.Text += $" These are still changed: {string.Join(", ", failed)}.";

@@ -24,7 +24,7 @@ public static class Heat
     static readonly TimeSpan Every = TimeSpan.FromSeconds(10), Quiet = TimeSpan.FromMinutes(2);
     static Timer? timer;
     static DateTime lastSpike;
-    static bool noZones;
+    static DateTime noZonesUntil; // after an empty read, ask again in 5 minutes, as a zone can read nonsense after sleep
 
     public static List<Zone> Latest { get; private set; } = [];
 
@@ -50,7 +50,7 @@ public static class Heat
     // Every thermal zone Windows reports, by its short name (TZ00 and so on). Empty on PCs without any.
     public static List<Zone> Zones()
     {
-        if (noZones) return [];
+        if (DateTime.Now < noZonesUntil) return [];
         try
         {
             using var search = new ManagementObjectSearcher(@"root\WMI", "SELECT InstanceName, CurrentTemperature FROM MSAcpi_ThermalZoneTemperature");
@@ -58,10 +58,14 @@ public static class Heat
                 .Select(z => new Zone(ZoneName((string)z["InstanceName"]), Math.Round(Convert.ToDouble(z["CurrentTemperature"]) / 10 - 273.15, 1)))
                 .Where(z => z.Celsius is > 15 and < 115) // anything else is a sensor reading nonsense
                 .ToList();
-            noZones = zones.Count == 0;
+            if (zones.Count == 0) noZonesUntil = DateTime.Now.AddMinutes(5);
             return zones;
         }
-        catch (Exception e) when (e is ManagementException or COMException or UnauthorizedAccessException) { noZones = true; return []; }
+        catch (Exception e) when (e is ManagementException or COMException or UnauthorizedAccessException)
+        {
+            noZonesUntil = DateTime.Now.AddMinutes(5);
+            return [];
+        }
     }
 
     // "ACPI\ThermalZone\TZ00_0" reads as TZ00.
@@ -173,6 +177,14 @@ public static class QuietProfile
     static readonly object gate = new();
 
     public static bool Capped => Settings.GetText(SavedSetting) != null;
+
+    // The switch: on caps now unless a game is running; off puts everything back.
+    public static void Switch(bool on)
+    {
+        Settings.Set(Setting, on);
+        if (on) App.Watcher?.ApplyRates();
+        else Lift();
+    }
 
     public static void Cap()
     {

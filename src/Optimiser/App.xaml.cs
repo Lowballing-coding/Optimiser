@@ -87,6 +87,7 @@ public partial class App : Application
         Updates.CleanUp();
 
         try { GameWatcher.RestorePowerMode(); } catch { } // left on Best performance if Optimiser was closed mid-game
+        try { if (!Settings.Get(QuietProfile.Setting, false)) QuietProfile.Lift(); } catch { } // capped when it closed, then switched off
         try { Etw.Stop(Fps.SessionName); } catch { } // and the frame counter, which Windows keeps running until it's stopped
         try
         {

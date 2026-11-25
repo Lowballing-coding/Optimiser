@@ -224,24 +224,25 @@ public sealed class GameWatcher : IDisposable
     {
         lock (rates)
         {
+            bool ready, full;
+            lock (running) (ready, full) = (ratesReady, fullRate); // not ready again once closing
+            if (!ready) return;
             try
             {
-                bool ready, full;
-                lock (running) (ready, full) = (ratesReady, fullRate); // not ready again once closing
-                if (!ready) return;
                 if (Settings.Get(DesktopHzSetting, false))
                 {
                     Display.Match(full);
                     desktopHz = full ? 0 : Display.FastestHz();
                 }
+            }
+            catch (Exception e) { Warning?.Invoke($"Couldn't change the screen's refresh rate: {e.Message}"); }
+            try
+            {
                 if (!Settings.Get(QuietProfile.Setting, false)) return;
                 if (full) QuietProfile.Lift();
                 else QuietProfile.Cap();
             }
-            catch (Exception e)
-            {
-                Warning?.Invoke($"Couldn't change the screen's refresh rate: {e.Message}");
-            }
+            catch (Exception e) { Warning?.Invoke($"Couldn't switch the quiet profile: {e.Message}"); }
         }
     }
 
