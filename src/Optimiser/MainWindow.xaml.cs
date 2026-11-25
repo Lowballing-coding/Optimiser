@@ -638,7 +638,7 @@ public partial class MainWindow : Window
         var name = OverlayKey.Name(OverlayKey.Current);
         HotkeyButton.Content = name;
         HotkeyText.Text = registered
-            ? $"Full shows everything, Compact just FPS, the 1% low, GPU temperature and ping. {name} shows or hides the overlay from inside a game."
+            ? $"{name} shows or hides the overlay from inside a game. Full shows everything, Compact just FPS, the 1% low, GPU temperature and ping."
             : $"Another program already uses {name}, so it doesn't show or hide the overlay. Press the button to pick other keys.";
     }
 
@@ -1113,6 +1113,10 @@ public partial class MainWindow : Window
             nav.IsChecked = true;
             await Save((string)nav.Tag);
         }
+        ((RadioButton)Nav.Children[0]).IsChecked = true;
+        Dashboard.ScrollToEnd();
+        await Save("Dashboard further down");
+        Dashboard.ScrollToHome();
         ShowUpdate(new Release(new Version(1, 0, 99), "", 0, null, "Settings page with update checks\nRemembers where you left the window"));
         await Save("Settings with an update");
         UpdateText.Text = "Downloading Optimiser 1.0.99…";
