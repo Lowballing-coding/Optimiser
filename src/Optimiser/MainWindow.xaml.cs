@@ -175,7 +175,46 @@ public partial class MainWindow : Window
         // `Optimiser.exe --snapshot <folder>` saves a picture of every page and exits. CI uses it to check the UI.
         var args = Environment.GetCommandLineArgs();
         var i = Array.IndexOf(args, "--snapshot");
-        if (i >= 0 && i + 1 < args.Length) await Snapshot(args[i + 1]);
+        if (i >= 0 && i + 1 < args.Length) { await Snapshot(args[i + 1]); return; }
+
+        // Each start (Optimiser starts at sign-in) and each wake from sleep, so opening the laptop checks too.
+        _ = CheckDriver();
+        Microsoft.Win32.SystemEvents.PowerModeChanged += (_, pe) =>
+        {
+            if (pe.Mode == Microsoft.Win32.PowerModes.Resume) Dispatcher.InvokeAsync(CheckDriver);
+        };
+    }
+
+    // Says when Nvidia has a newer driver, at most once a day. Wi-Fi can take a minute after sign-in or a wake,
+    // so it tries three times.
+    DateTime driverToldAt;
+    bool checkingDriver;
+    async Task CheckDriver()
+    {
+        if (checkingDriver || App.Hardware is not { NvidiaGpu: not null }) return;
+        checkingDriver = true;
+        var (_, date, version) = await Task.Run(Hardware.NvidiaDriver); // installed since the last check?
+        App.Hardware = App.Hardware with { NvidiaDriverDate = date, NvidiaDriverVersion = version };
+        if (App.Hardware is not { NvidiaGpu: { } gpu, NvidiaDriverVersion: { } installed }) { checkingDriver = false; return; }
+        for (var tries = 0; tries < 3; tries++)
+        {
+            try
+            {
+                if (await NvidiaDrivers.Check(gpu) is { } latest)
+                {
+                    Refresh();
+                    _ = ShowHealth();
+                    if (NvidiaDrivers.IsNewer(latest, installed) && DateTime.Now - driverToldAt > TimeSpan.FromDays(1))
+                    {
+                        driverToldAt = DateTime.Now;
+                        App.Notify($"Nvidia driver {latest} is out and you have {installed}. Open the NVIDIA App to install it.");
+                    }
+                }
+                break;
+            }
+            catch { await Task.Delay(TimeSpan.FromMinutes(1)); } // no network yet, or Nvidia's site is down
+        }
+        checkingDriver = false;
     }
 
     async Task ShowHealth()

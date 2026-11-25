@@ -780,6 +780,31 @@ var poorly = Health.Items(95, DateTime.Now.AddDays(-400), 15, 50, 1000, 4, false
 Check(Health.Score(healthy) == 100 && Health.Score(poorly) < 20 && Health.Items(null, null, 0, 0, 0, null, false, DateTime.Now).Count == 1,
       "health score: full marks when all is well, low when not, and only what this PC has counts");
 
+Check(Health.Items(null, DateTime.Now, 0, 0, 0, null, false, DateTime.Now, "560.94", "566.36")[0].Points == 0
+      && Health.Items(null, DateTime.Now.AddDays(-400), 0, 0, 0, null, false, DateTime.Now, "566.36", "566.36")[0].Points == 20,
+      "health score: the driver counts against Nvidia's newest when that's known, not its age");
+
+// Nvidia driver: Windows' version number, Nvidia's product list and its newest driver.
+Check(NvidiaDrivers.Installed("32.0.15.6636") == "566.36" && NvidiaDrivers.Installed("31.0.15.0612") == "506.12" && NvidiaDrivers.Installed("odd") == null,
+      "Windows' driver version reads as Nvidia's number");
+Check(NvidiaDrivers.IsNewer("566.36", "560.94") && !NvidiaDrivers.IsNewer("560.94", "566.36") && !NvidiaDrivers.IsNewer("566.36", "566.36")
+      && !NvidiaDrivers.IsNewer("<b>", "1"), "only a higher driver number counts as newer");
+var products = """<LookupValueSearch><LookupValues><LookupValue ParentID="120"><Name>GeForce RTX 3070 Ti</Name><Value>985</Value></LookupValue><LookupValue ParentID="125"><Name>GeForce RTX 3070 Ti Laptop GPU</Name><Value>963</Value></LookupValue></LookupValues></LookupValueSearch>""";
+Check(NvidiaDrivers.Find(products, "NVIDIA GeForce RTX 3070 Ti Laptop GPU") == ("125", "963") && NvidiaDrivers.Find(products, "NVIDIA GeForce GTX 1060") == null,
+      "the GPU is found by name in Nvidia's product list");
+Check(NvidiaDrivers.Version("""{"Success":"1","IDS":[{"downloadInfo":{"Success":"1","Version":"566.36"}}]}""") == "566.36"
+      && NvidiaDrivers.Version("""{"Success":"0","IDS":[]}""") == null, "Nvidia's answer gives the newest version");
+// ponytail: temporary, checks the live lookup once in CI; removed before merging.
+try
+{
+    var xml = await new System.Net.Http.HttpClient().GetStringAsync("https://www.nvidia.com/Download/API/lookupValueSearch.aspx?TypeID=3");
+    Console.WriteLine($"LIVE products: {xml.Length} chars, start {xml[..Math.Min(300, xml.Length)]}");
+    var liveFound = NvidiaDrivers.Find(xml, "NVIDIA GeForce RTX 3070 Ti Laptop GPU");
+    Console.WriteLine($"LIVE found {liveFound}");
+    Console.WriteLine($"LIVE newest {await NvidiaDrivers.Check("NVIDIA GeForce RTX 3070 Ti Laptop GPU")}");
+}
+catch (Exception ex) { Console.WriteLine($"LIVE failed: {ex}"); }
+
 // Disk cleanup only deletes files really inside the folder, never through a junction.
 var junk = Path.Combine(temp, "Junk");
 var outside = Path.Combine(temp, "Outside");

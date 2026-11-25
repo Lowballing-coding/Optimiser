@@ -8,20 +8,25 @@ namespace Optimiser;
 // One part of the health score: points out of a maximum, and what it found.
 public record HealthItem(string Name, int Points, int Max, string Detail);
 
-// The Dashboard's health score: temperatures, the Nvidia driver's age, startup apps, free disk space and Windows updates.
+// The Dashboard's health score: temperatures, whether the Nvidia driver is the newest, startup apps, free disk space and Windows updates.
 // Each part only counts when this PC has it, so a desktop without an Nvidia GPU isn't marked down for its driver.
 public static class Health
 {
     public static int Score(List<HealthItem> items) => items.Sum(i => i.Max) is var max and > 0 ? 100 * items.Sum(i => i.Points) / max : 100;
 
     // The facts are passed in, so the scoring can be checked without this PC's numbers.
-    public static List<HealthItem> Items(double? hottest, DateTime? driver, int startupApps, double freeGb, double totalGb, int? updates, bool restart, DateTime now)
+    public static List<HealthItem> Items(double? hottest, DateTime? driver, int startupApps, double freeGb, double totalGb, int? updates, bool restart, DateTime now,
+        string? installed = null, string? latest = null)
     {
         var items = new List<HealthItem>();
         if (hottest is { } t)
             items.Add(new("Temperature", t < 70 ? 25 : t < 80 ? 15 : t < 90 ? 5 : 0, 25,
                 t < 80 ? $"Hottest sensor at {t:0} °C." : $"Hottest sensor at {t:0} °C. The Heat page shows what's warming it."));
-        if (driver is { } d)
+        if (driver != null && installed != null && latest != null)
+            items.Add(NvidiaDrivers.IsNewer(latest, installed)
+                ? new("Nvidia driver", 0, 20, $"Driver {latest} is out and you have {installed}. The NVIDIA App installs it in a couple of clicks.")
+                : new("Nvidia driver", 20, 20, $"Nvidia's newest, {installed}."));
+        else if (driver is { } d)
         {
             var days = (int)(now - d).TotalDays;
             items.Add(new("Nvidia driver", days <= 90 ? 20 : days <= 180 ? 10 : 0, 20,
@@ -49,7 +54,7 @@ public static class Health
         bool restart;
         using (var k = Reg.Open(@"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired")) restart = k != null;
         return Items(Heat.Hottest(), App.Hardware?.NvidiaDriverDate, startups, drive.AvailableFreeSpace / 1e9, drive.TotalSize / 1e9,
-            PendingUpdates(), restart, DateTime.Now);
+            PendingUpdates(), restart, DateTime.Now, App.Hardware?.NvidiaDriverVersion, NvidiaDrivers.Latest);
     }
 
 

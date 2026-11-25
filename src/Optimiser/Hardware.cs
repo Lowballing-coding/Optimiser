@@ -6,7 +6,8 @@ namespace Optimiser;
 
 // What the app found on this PC. Tweaks use the flags at the bottom to decide whether they apply.
 public record Hardware(string Cpu, int PCores, int ECores, int Threads, string[] Gpus, double RamGb,
-                       string Maker, string Model, bool IsLaptop, DateTime? NvidiaDriverDate = null)
+                       string Maker, string Model, bool IsLaptop, DateTime? NvidiaDriverDate = null,
+                       string? NvidiaGpu = null, string? NvidiaDriverVersion = null)
 {
     public bool HasNvidia => Gpus.Any(g => g.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase));
     public bool HasDedicatedGpu => Gpus.Any(IsDedicated);
@@ -28,6 +29,7 @@ public record Hardware(string Cpu, int PCores, int ECores, int Threads, string[]
         var installed = All("Win32_PhysicalMemory", "Capacity").Sum(long.Parse);
         if (installed == 0) installed = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
         var (p, e) = CoreCounts();
+        var (gpu, date, version) = NvidiaDriver();
         return new(
             Cpu: First("Win32_Processor", "Name"),
             PCores: p, ECores: e, Threads: Environment.ProcessorCount,
@@ -36,20 +38,22 @@ public record Hardware(string Cpu, int PCores, int ECores, int Threads, string[]
             Maker: First("Win32_ComputerSystem", "Manufacturer"),
             Model: First("Win32_ComputerSystem", "Model"),
             IsLaptop: IsPortable(),
-            NvidiaDriverDate: NvidiaDriver());
+            NvidiaDriverDate: date, NvidiaGpu: gpu, NvidiaDriverVersion: version);
     }
 
-    static DateTime? NvidiaDriver()
+    // The Nvidia GPU's name, its driver's date and its version as Nvidia writes it ("566.36").
+    public static (string? Gpu, DateTime? Date, string? Version) NvidiaDriver()
     {
         try
         {
-            using var search = new ManagementObjectSearcher("SELECT Name, DriverDate FROM Win32_VideoController");
+            using var search = new ManagementObjectSearcher("SELECT Name, DriverDate, DriverVersion FROM Win32_VideoController");
             return search.Get().Cast<ManagementBaseObject>()
                 .Where(o => o["Name"]?.ToString()?.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) == true && o["DriverDate"] is string)
-                .Select(o => (DateTime?)ManagementDateTimeConverter.ToDateTime((string)o["DriverDate"]))
+                .Select(o => ((string?)o["Name"]!.ToString()!.Trim(), (DateTime?)ManagementDateTimeConverter.ToDateTime((string)o["DriverDate"]),
+                              NvidiaDrivers.Installed(o["DriverVersion"]?.ToString() ?? "")))
                 .FirstOrDefault();
         }
-        catch { return null; } // an odd date shouldn't stop the whole scan; the driver check just doesn't show
+        catch { return (null, null, null); } // an odd date shouldn't stop the whole scan; the driver check just doesn't show
     }
 
     // Uses the chassis type, not "has a battery", because desktops on a USB UPS report a battery too.
