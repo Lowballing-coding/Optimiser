@@ -800,6 +800,7 @@ var junkRoot = new DirectoryInfo(junk).FullName;
 Check(Cleanup.DeleteInside(Path.Combine(junk, "link", "keep.txt"), [junkRoot]) == null && File.Exists(Path.Combine(outside, "keep.txt")),
       "a file reached through a junction isn't deleted");
 Check(Cleanup.DeleteInside(found[0], [junkRoot]) == 1 && !File.Exists(found[0]), "a file inside is deleted");
+Directory.Delete(Path.Combine(junk, "link")); // the junction alone, so the recursive delete at the end doesn't trip on it
 
 // Weekly report and the overlay's layouts and key.
 var week = Report.Lines(DateTime.Now, [new(DateTime.Today, 96)], [new(DateTime.Now, "TZ00", 96, 3, [])],
