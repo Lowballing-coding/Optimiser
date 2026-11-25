@@ -208,15 +208,20 @@ public static class Tweaks
 
     static Optimisation NvidiaDriver()
     {
-        var date = App.Hardware?.NvidiaDriverDate;
+        var hw = App.Hardware;
+        var (installed, latest) = (hw?.NvidiaDriverVersion, NvidiaDrivers.Latest);
+        var behind = installed != null && latest != null && NvidiaDrivers.IsNewer(latest, installed);
         return new()
         {
             Name = "Up-to-date Nvidia driver",
             Group = BiggestWins,
-            Description = $"Your Nvidia driver is from {date:MMMM yyyy}. Nvidia's Game Ready drivers bring fixes and speed-ups for "
-                        + "recent games, so it's worth updating every few months. The NVIDIA app does it in a couple of clicks.",
+            Description = (installed != null && latest != null
+                              ? behind ? $"Nvidia driver {latest} is out and you have {installed}. " : $"You have Nvidia's newest driver, {installed}. "
+                              : $"Your Nvidia driver is from {hw?.NvidiaDriverDate:MMMM yyyy}. ")
+                        + "Nvidia's Game Ready drivers bring fixes and speed-ups for recent games. Optimiser checks for a new one each time "
+                        + "it starts. The NVIDIA app installs it in a couple of clicks.",
             AppliesTo = hw => hw.NvidiaDriverDate != null,
-            IsOn = () => date > DateTime.Now.AddDays(-90),
+            IsOn = () => latest != null && installed != null ? !behind : hw?.NvidiaDriverDate > DateTime.Now.AddDays(-90),
             ButtonText = "Open NVIDIA app",
             Button = () => OpenAsYou(File.Exists(NvidiaApp) ? NvidiaApp : "https://www.nvidia.com/en-us/software/nvidia-app/"),
         };
