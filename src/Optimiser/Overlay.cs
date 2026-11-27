@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,10 +27,20 @@ public sealed class Overlay : Window
 
     static readonly Brush Label = Frozen(0xE8, 0xE8, 0xE8), Good = Frozen(0x8B, 0xE0, 0x4E), Fair = Frozen(0xE8, 0xD8, 0x4A),
         Bad = Frozen(0xFF, 0x5A, 0x4F), Hot = Frozen(0xFF, 0x9A, 0x2E);
-    static readonly Brush Shade = Freeze(new LinearGradientBrush(
-        [new(Color.FromArgb(0x00, 0, 0, 0), 0), new(Color.FromArgb(0x8C, 0, 0, 0), 0.35), new(Color.FromArgb(0x99, 0, 0, 0), 1)], 0));
+    // Okabe-Ito colours for the colour-blind palette: blue, yellow and pink stay apart for every common kind.
+    static readonly Brush SafeGood = Frozen(0x56, 0xB4, 0xE9), SafeFair = Frozen(0xF0, 0xE4, 0x42), SafeBad = Frozen(0xCC, 0x79, 0xA7);
+    static readonly LinearGradientBrush Shade = Fade(0), ShadeLeft = Fade(180); // dark at the screen edge, fading inwards
 
-    readonly StackPanel bars = new();
+    // How it looks, set on the Stats page. Numbers are saved as text; anything unset is the look it shipped with.
+    public const string SizeSetting = "OverlaySize", ShadeSetting = "OverlayShade", OpacitySetting = "OverlayOpacity", EdgeSetting = "OverlayEdge",
+        CornerSetting = "OverlayCorner", ColoursSetting = "OverlayColours", DetailsSetting = "OverlayDetails", HiddenSetting = "OverlayHidden";
+    public static readonly string[] Corners = ["Top right", "Top left", "Bottom right", "Bottom left"], Palettes = ["Standard", "Colour-blind", "White"],
+        StatNames = ["FPS", "1% low", "CPU", "GPU", "GPU temp", "Ping", "Warnings"];
+    public static readonly string[] LookSettings = [SizeSetting, ShadeSetting, OpacitySetting, EdgeSetting, CornerSetting, ColoursSetting, DetailsSetting, HiddenSetting];
+    public const double DefaultSize = 80, DefaultEdge = 14; // 80%: Peter found the first size too big (2026-11-27)
+
+    public static double Number(string setting, double fallback) =>
+        double.TryParse(Settings.GetText(setting), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : fallback;
 
     Overlay()
     {
@@ -37,8 +48,6 @@ public sealed class Overlay : Window
         (Topmost, ShowInTaskbar, ShowActivated, Focusable, SizeToContent) = (true, false, false, false, SizeToContent.WidthAndHeight);
         (Left, Top) = (-10000, -10000); // placed in pixels once it has a size
         FontFamily = (FontFamily)Application.Current.Resources["Ui"];
-        Content = bars;
-        bars.LayoutTransform = new ScaleTransform(0.8, 0.8); // 20% smaller than the original design, Peter 2026-11-27
         DpiChanged += (_, _) => Place(GetForegroundWindow()); // moving onto a screen with other scaling resizes it, so place it again
         SourceInitialized += (_, _) =>
         {
@@ -64,7 +73,7 @@ public sealed class Overlay : Window
             if (r.GpuTemp is { } t) peaks.TempMax = Math.Max(peaks.TempMax, t);
             Network.ForOverlay = true;
             shown.Fill(Layout(Bars(game.Session, game.Current, r, CpuTemp(), new(peaks.TempMax == double.MinValue ? null : peaks.TempMax), Network.Now()),
-                Settings.GetText(LayoutSetting)));
+                Settings.GetText(LayoutSetting), Settings.GetList(HiddenSetting)));
             if (!shown.IsVisible) shown.Show();
             shown.Place(GetForegroundWindow());
         }
@@ -130,35 +139,49 @@ public sealed class Overlay : Window
     public const string LayoutSetting = "OverlayLayout";
     public static readonly string[] Layouts = ["Full", "Compact", "FPS only"];
 
-    public static List<Bar> Layout(List<Bar> bars, string? layout) => layout switch
-    {
-        "Compact" => [.. bars.Where(b => b.Label is "FPS" or "1% low" or "GPU temp" or "Ping" or "")],
-        "FPS only" => [.. bars.Take(1)],
-        _ => bars,
-    };
+    // The preset, minus any stat unticked on the Stats page ("Warnings" is the orange held-back bars).
+    public static List<Bar> Layout(List<Bar> bars, string? layout, string[]? hidden = null) =>
+        [.. (layout switch
+        {
+            "Compact" => bars.Where(b => b.Label is "FPS" or "1% low" or "GPU temp" or "Ping" or ""),
+            "FPS only" => bars.Take(1),
+            _ => bars,
+        }).Where(b => !(hidden ?? []).Contains(b.Label == "" ? "Warnings" : b.Label))];
 
-    void Fill(List<Bar> list)
+    void Fill(List<Bar> list) => Content = Build(list);
+
+    // The bars as the saved look has them: size, see-through background, overall opacity, side, colours and second lines.
+    // Also drawn as the preview on the Stats page.
+    public static StackPanel Build(List<Bar> list)
     {
-        bars.Children.Clear();
+        var left = Settings.GetText(CornerSetting)?.EndsWith("left") == true;
+        var palette = Settings.GetText(ColoursSetting);
+        var details = Settings.Get(DetailsSetting, true);
+        var shade = (left ? ShadeLeft : Shade).Clone();
+        shade.Opacity = Math.Clamp(Number(ShadeSetting, 100), 0, 100) / 100;
+        shade.Freeze();
+        var scale = Math.Clamp(Number(SizeSetting, DefaultSize), 50, 150) / 100;
+        var panel = new StackPanel { LayoutTransform = new ScaleTransform(scale, scale), Opacity = Math.Clamp(Number(OpacitySetting, 100), 20, 100) / 100 };
         foreach (var bar in list)
         {
-            var grid = new Grid { HorizontalAlignment = HorizontalAlignment.Right };
+            var grid = new Grid { HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right };
             grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
             grid.ColumnDefinitions.Add(new() { Width = new(bar.Label == "" ? 0 : 74) }); // values line up from bar to bar
             Add(grid, bar.Label, Label, 0, 0, 13);
-            Add(grid, bar.Value, Paint(bar.Tone), 0, bar.Label == "" ? 0 : 1, 13);
-            if (bar.SubLabel != "" || bar.SubValue != "")
+            Add(grid, bar.Value, Paint(bar.Tone, palette), 0, bar.Label == "" ? 0 : 1, 13);
+            if (details && (bar.SubLabel != "" || bar.SubValue != ""))
             {
                 grid.RowDefinitions.Add(new() { Height = GridLength.Auto });
                 grid.RowDefinitions.Add(new() { Height = GridLength.Auto });
                 Add(grid, bar.SubLabel, Label, 1, 0, 11.5);
-                Add(grid, bar.SubValue, Paint(bar.SubTone), 1, 1, 11.5);
+                Add(grid, bar.SubValue, Paint(bar.SubTone, palette), 1, 1, 11.5);
             }
-            bars.Children.Add(new Border
+            panel.Children.Add(new Border
             {
-                Background = Shade, Width = 230, Margin = new(0, 0, 0, 8), Padding = new(0, 3, 14, 4), Child = grid,
+                Background = shade, Width = 230, Margin = new(0, 0, 0, 8), Padding = left ? new(14, 3, 0, 4) : new(0, 3, 14, 4), Child = grid,
             });
         }
+        return panel;
     }
 
     static void Add(Grid grid, string text, Brush brush, int row, int column, double size)
@@ -174,29 +197,52 @@ public sealed class Overlay : Window
         grid.Children.Add(block);
     }
 
-    static Brush Paint(Tone tone) => tone switch { Tone.Good => Good, Tone.Fair => Fair, Tone.Bad => Bad, Tone.Hot => Hot, _ => Label };
+    // Orange (heat) stays orange in every palette, so a slowdown always stands out.
+    static Brush Paint(Tone tone, string? palette) => (tone, palette) switch
+    {
+        (Tone.Hot, _) => Hot,
+        (_, "White") => Label,
+        (Tone.Good, "Colour-blind") => SafeGood,
+        (Tone.Fair, "Colour-blind") => SafeFair,
+        (Tone.Bad, "Colour-blind") => SafeBad,
+        (Tone.Good, _) => Good,
+        (Tone.Fair, _) => Fair,
+        (Tone.Bad, _) => Bad,
+        _ => Label,
+    };
     static Brush Frozen(byte r, byte g, byte b) => Freeze(new SolidColorBrush(Color.FromRgb(r, g, b)));
     static Brush Freeze(Brush brush) { brush.Freeze(); return brush; }
+    static LinearGradientBrush Fade(double angle)
+    {
+        var brush = new LinearGradientBrush(
+            [new(Color.FromArgb(0x00, 0, 0, 0), 0), new(Color.FromArgb(0x8C, 0, 0, 0), 0.35), new(Color.FromArgb(0x99, 0, 0, 0), 1)], angle);
+        brush.Freeze();
+        return brush;
+    }
 
-    // Flush with the top-right edge of the screen the game is on, in pixels, and back on top in case the game pushed it down.
+    // Flush with the picked side of the screen the game is on, the saved gap from its top or bottom, in pixels, and back on
+    // top in case the game pushed it down.
     void Place(IntPtr game)
     {
         UpdateLayout();
         var screen = System.Windows.Forms.Screen.FromHandle(game).Bounds;
         var dpi = VisualTreeHelper.GetDpi(this);
-        int width = (int)Math.Ceiling(ActualWidth * dpi.DpiScaleX), top = (int)(14 * dpi.DpiScaleY);
-        SetWindowPos(new WindowInteropHelper(this).Handle, TopmostWindow, screen.Right - width, screen.Top + top, 0, 0,
-            NoSize | NoActivateWindow);
+        var corner = Settings.GetText(CornerSetting) ?? Corners[0];
+        int width = (int)Math.Ceiling(ActualWidth * dpi.DpiScaleX), height = (int)Math.Ceiling(ActualHeight * dpi.DpiScaleY),
+            gap = (int)(Math.Clamp(Number(EdgeSetting, DefaultEdge), 0, 200) * dpi.DpiScaleY);
+        SetWindowPos(new WindowInteropHelper(this).Handle, TopmostWindow, corner.EndsWith("left") ? screen.Left : screen.Right - width,
+            corner.StartsWith("Bottom") ? screen.Bottom - height - gap : screen.Top + gap, 0, 0, NoSize | NoActivateWindow);
     }
 
-    // For the CI snapshot: the bars with made-up numbers, as they show over a game that's running hot.
+    // Made-up numbers, as they show over a game that's running hot: the CI snapshot and the Stats page preview.
+    public static List<Bar> SampleBars() => Bars(new FpsSession("Call of Duty", DateTime.Now, 600, 104.4, 131, 71.2, 52.0, true, [], 1), 112,
+        new Reading(88, 97, 1350, 1800, 115, 125, 6.1, 8, 72, 18.3, 32, true, false, 100, Stats.SwThermalSlowdown, 92, 2300, 4),
+        91, new(89), new(24, 3, 0));
+
     public static Overlay Sample()
     {
         var overlay = new Overlay();
-        var session = new FpsSession("Call of Duty", DateTime.Now, 600, 104.4, 131, 71.2, 52.0, true, [], 1);
-        var reading = new Reading(88, 97, 1350, 1800, 115, 125, 6.1, 8, 72, 18.3, 32, true, false, 100,
-            Stats.SwThermalSlowdown, 92, 2300, 4);
-        overlay.Fill(Bars(session, 112, reading, 91, new(89), new(24, 3, 0)));
+        overlay.Fill(SampleBars());
         overlay.Background = new SolidColorBrush(Color.FromRgb(0x2E, 0x5C, 0x7A)); // stands in for the game behind it
         return overlay;
     }

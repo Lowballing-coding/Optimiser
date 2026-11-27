@@ -830,6 +830,12 @@ Check(Report.Lines(DateTime.Now, [], [], [], [], [])[0].StartsWith("Nothing"), "
     Check(all.Contains(new("Ping", "24 ms", Overlay.Tone.Good, "Jitter", "3 ms, 0% lost", Overlay.Tone.Plain))
           && Overlay.Layout(all, "FPS only").Count == 1 && Overlay.Layout(all, "Compact").Select(b => b.Label).SequenceEqual(["FPS", "1% low", "GPU temp", "Ping"])
           && Overlay.Layout(all, null).Count == all.Count, "overlay ping bar and layout presets");
+    Check(Overlay.Layout(all, "Compact", ["Ping", "Warnings"]).Select(b => b.Label).SequenceEqual(["FPS", "1% low", "GPU temp"])
+          && Overlay.Layout(all, null, ["CPU"]).Count == all.Count - 1, "unticked stats are left off the overlay");
+    Settings.SetText(Overlay.SizeSetting, "95");
+    Check(Overlay.Number(Overlay.SizeSetting, Overlay.DefaultSize) == 95 && Overlay.Number(Overlay.EdgeSetting, Overlay.DefaultEdge) == 14,
+          "overlay look numbers read back, with defaults when unset");
+    Settings.SetText(Overlay.SizeSetting, null);
 }
 Check(OverlayKey.Name((OverlayKey.Ctrl | OverlayKey.Shift, 0x4F)) == "Ctrl+Shift+O" && OverlayKey.Name((OverlayKey.Alt, 0x31)) == "Alt+1"
       && OverlayKey.Name((0, 0x79)) == "F10", "overlay key names");
