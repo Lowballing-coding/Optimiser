@@ -38,7 +38,7 @@ public sealed class Overlay : Window
     public const string SizeSetting = "OverlaySize", ShadeSetting = "OverlayShade", OpacitySetting = "OverlayOpacity", EdgeSetting = "OverlayEdge",
         CornerSetting = "OverlayCorner", StyleSetting = "OverlayStyle", ColoursSetting = "OverlayColours", DetailsSetting = "OverlayDetails", HiddenSetting = "OverlayHidden";
     public static readonly string[] Styles = ["Bars", "Cards", "Minimal", "Strip"];
-    public static readonly string[] Corners = ["Top right", "Top left", "Bottom right", "Bottom left"], Palettes = ["Standard", "Colour-blind", "White"],
+    public static readonly string[] Corners = ["Top right", "Top left", "Top middle", "Bottom right", "Bottom left"], Palettes = ["Standard", "Colour-blind", "White"],
         StatNames = ["FPS", "1% low", "CPU", "GPU", "GPU temp", "Ping", "Warnings"];
     public static readonly string[] LookSettings = [StyleSetting, SizeSetting, ShadeSetting, OpacitySetting, EdgeSetting, CornerSetting, ColoursSetting, DetailsSetting, HiddenSetting];
     public const double DefaultSize = 80, DefaultEdge = 14; // 80%: Peter found the first size too big (2026-11-27)
@@ -250,7 +250,7 @@ public sealed class Overlay : Window
         var corner = Settings.GetText(CornerSetting) ?? Corners[0];
         int width = (int)Math.Ceiling(ActualWidth * dpi.DpiScaleX), height = (int)Math.Ceiling(ActualHeight * dpi.DpiScaleY),
             gap = (int)(Math.Clamp(Number(EdgeSetting, DefaultEdge), 0, 200) * dpi.DpiScaleY);
-        SetWindowPos(new WindowInteropHelper(this).Handle, TopmostWindow, corner.EndsWith("left") ? screen.Left : screen.Right - width,
+        SetWindowPos(new WindowInteropHelper(this).Handle, TopmostWindow, corner.EndsWith("left") ? screen.Left : corner.EndsWith("middle") ? screen.Left + (screen.Width - width) / 2 : screen.Right - width,
             corner.StartsWith("Bottom") ? screen.Bottom - height - gap : screen.Top + gap, 0, 0, NoSize | NoActivateWindow);
     }
 

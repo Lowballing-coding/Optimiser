@@ -703,7 +703,7 @@ public partial class MainWindow : Window
         OverlayPreview.Child = new Viewbox // a wide Strip shrinks to fit the preview
         {
             StretchDirection = StretchDirection.DownOnly, Child = bars,
-            HorizontalAlignment = corner.EndsWith("left") ? HorizontalAlignment.Left : HorizontalAlignment.Right,
+            HorizontalAlignment = corner.EndsWith("left") ? HorizontalAlignment.Left : corner.EndsWith("middle") ? HorizontalAlignment.Center : HorizontalAlignment.Right,
             VerticalAlignment = corner.StartsWith("Bottom") ? VerticalAlignment.Bottom : VerticalAlignment.Top,
         };
     }
