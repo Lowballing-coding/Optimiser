@@ -191,7 +191,7 @@ public sealed class Overlay : Window
                 "Cards" => new Border
                 {
                     Background = solid, CornerRadius = new(8), BorderBrush = Paint(bar.Tone, palette), BorderThickness = left ? new(3, 0, 0, 0) : new(0, 0, 3, 0),
-                    Width = 200, Margin = new(0, 0, 0, 6), Padding = new(12, 4, 12, 5), Child = grid,
+                    MinWidth = 200, Margin = new(0, 0, 0, 6), Padding = new(12, 4, 12, 5), Child = grid, // stretches to the widest card
                 },
                 "Minimal" => new Border { Margin = new(0, 0, 0, 4), Padding = new(8, 0, 8, 0), Effect = Outline, Child = grid },
                 "Strip" => new Border { Background = solid, Margin = new(0, 0, 2, 0), Padding = new(10, 3, 12, 4), Child = grid },
