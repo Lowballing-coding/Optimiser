@@ -658,10 +658,10 @@ public partial class MainWindow : Window
     void ShowOverlayLook()
     {
         var hidden = Optimiser.Settings.GetList(Overlay.HiddenSetting);
-        var chips = new WrapPanel();
+        var chips = new WrapPanel { Margin = new(0, 0, 0, -8) }; // cancels the last row's chip gap
         foreach (var stat in Overlay.StatNames)
         {
-            var chip = new CheckBox { Content = stat, IsChecked = !hidden.Contains(stat), Style = (Style)FindResource("Segment") };
+            var chip = new CheckBox { Content = stat, IsChecked = !hidden.Contains(stat), Style = (Style)FindResource("Chip") };
             System.Windows.Automation.AutomationProperties.SetName(chip, $"Show {stat} on the overlay");
             chip.Click += (_, _) =>
             {
@@ -677,7 +677,7 @@ public partial class MainWindow : Window
         foreach (var (name, control) in new (string, FrameworkElement)[]
         {
             ("Layout", Picker(Overlay.LayoutSetting, Overlay.Layouts, "Overlay layout")),
-            ("Stats", new Border { Style = (Style)FindResource("SegmentBox"), Child = chips, HorizontalAlignment = HorizontalAlignment.Left }),
+            ("Stats", chips),
             ("Second lines", details),
             ("Position", Picker(Overlay.CornerSetting, Overlay.Corners, "Overlay position")),
             ("Colours", Picker(Overlay.ColoursSetting, Overlay.Palettes, "Overlay colours")),
