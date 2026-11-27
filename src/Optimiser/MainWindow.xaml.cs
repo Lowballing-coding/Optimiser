@@ -676,6 +676,7 @@ public partial class MainWindow : Window
         OverlayLook.Children.Clear();
         foreach (var (name, control) in new (string, FrameworkElement)[]
         {
+            ("Style", Picker(Overlay.StyleSetting, Overlay.Styles, "Overlay style")),
             ("Layout", Picker(Overlay.LayoutSetting, Overlay.Layouts, "Overlay layout")),
             ("Stats", chips),
             ("Second lines", details),
@@ -698,10 +699,13 @@ public partial class MainWindow : Window
     {
         var corner = Optimiser.Settings.GetText(Overlay.CornerSetting) ?? Overlay.Corners[0];
         var bars = Overlay.Build(Overlay.Layout(Overlay.SampleBars(), Optimiser.Settings.GetText(Overlay.LayoutSetting), Optimiser.Settings.GetList(Overlay.HiddenSetting)));
-        bars.HorizontalAlignment = corner.EndsWith("left") ? HorizontalAlignment.Left : HorizontalAlignment.Right;
-        bars.VerticalAlignment = corner.StartsWith("Bottom") ? VerticalAlignment.Bottom : VerticalAlignment.Top;
         bars.Margin = new(0, 10, 0, 2);
-        OverlayPreview.Child = bars;
+        OverlayPreview.Child = new Viewbox // a wide Strip shrinks to fit the preview
+        {
+            StretchDirection = StretchDirection.DownOnly, Child = bars,
+            HorizontalAlignment = corner.EndsWith("left") ? HorizontalAlignment.Left : HorizontalAlignment.Right,
+            VerticalAlignment = corner.StartsWith("Bottom") ? VerticalAlignment.Bottom : VerticalAlignment.Top,
+        };
     }
 
     void OnOverlayReset(object sender, RoutedEventArgs e)
@@ -1271,6 +1275,11 @@ public partial class MainWindow : Window
         await Task.Delay(250);
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
         SavePicture(overlay, "In-game overlay");
+        StackPanel Look(string style) { var p = Overlay.Build(Overlay.SampleBars(), style); p.Margin = new(12); p.VerticalAlignment = VerticalAlignment.Top; return p; }
+        overlay.Content = new StackPanel { Children = { new StackPanel { Orientation = Orientation.Horizontal, Children = { Look("Bars"), Look("Cards"), Look("Minimal") } }, Look("Strip") } };
+        await Task.Delay(250);
+        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+        SavePicture(overlay, "Overlay styles");
         overlay.Close();
         ((RadioButton)Nav.Children[1]).IsChecked = true;
         var sample = SetCandidates.ToList();

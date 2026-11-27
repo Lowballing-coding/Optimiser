@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 
 namespace Optimiser;
 
@@ -30,13 +31,16 @@ public sealed class Overlay : Window
     // Okabe-Ito colours for the colour-blind palette: blue, yellow and pink stay apart for every common kind.
     static readonly Brush SafeGood = Frozen(0x56, 0xB4, 0xE9), SafeFair = Frozen(0xF0, 0xE4, 0x42), SafeBad = Frozen(0xCC, 0x79, 0xA7);
     static readonly LinearGradientBrush Shade = Fade(0), ShadeLeft = Fade(180); // dark at the screen edge, fading inwards
+    static readonly SolidColorBrush Solid = new(Color.FromArgb(0xC8, 0x12, 0x14, 0x18)); // Cards and Strip
+    static readonly DropShadowEffect Outline = Freeze(new DropShadowEffect { ShadowDepth = 1, BlurRadius = 4, Opacity = 0.95 }); // Minimal: readable on any game
 
     // How it looks, set on the Stats page. Numbers are saved as text; anything unset is the look it shipped with.
     public const string SizeSetting = "OverlaySize", ShadeSetting = "OverlayShade", OpacitySetting = "OverlayOpacity", EdgeSetting = "OverlayEdge",
-        CornerSetting = "OverlayCorner", ColoursSetting = "OverlayColours", DetailsSetting = "OverlayDetails", HiddenSetting = "OverlayHidden";
+        CornerSetting = "OverlayCorner", StyleSetting = "OverlayStyle", ColoursSetting = "OverlayColours", DetailsSetting = "OverlayDetails", HiddenSetting = "OverlayHidden";
+    public static readonly string[] Styles = ["Bars", "Cards", "Minimal", "Strip"];
     public static readonly string[] Corners = ["Top right", "Top left", "Bottom right", "Bottom left"], Palettes = ["Standard", "Colour-blind", "White"],
         StatNames = ["FPS", "1% low", "CPU", "GPU", "GPU temp", "Ping", "Warnings"];
-    public static readonly string[] LookSettings = [SizeSetting, ShadeSetting, OpacitySetting, EdgeSetting, CornerSetting, ColoursSetting, DetailsSetting, HiddenSetting];
+    public static readonly string[] LookSettings = [StyleSetting, SizeSetting, ShadeSetting, OpacitySetting, EdgeSetting, CornerSetting, ColoursSetting, DetailsSetting, HiddenSetting];
     public const double DefaultSize = 80, DefaultEdge = 14; // 80%: Peter found the first size too big (2026-11-27)
 
     public static double Number(string setting, double fallback) =>
@@ -150,23 +154,29 @@ public sealed class Overlay : Window
 
     void Fill(List<Bar> list) => Content = Build(list);
 
-    // The bars as the saved look has them: size, see-through background, overall opacity, side, colours and second lines.
-    // Also drawn as the preview on the Stats page.
-    public static StackPanel Build(List<Bar> list)
+    // The bars as the saved look has them: style, size, see-through background, overall opacity, side, colours and second
+    // lines. Also drawn as the preview on the Stats page. Styles: Bars (Rocket League-style, fading in from the edge),
+    // Cards (rounded tiles with a stripe in the reading's colour), Minimal (text only) and Strip (one row across the top).
+    public static StackPanel Build(List<Bar> list, string? style = null)
     {
+        style ??= Settings.GetText(StyleSetting) ?? Styles[0];
         var left = Settings.GetText(CornerSetting)?.EndsWith("left") == true;
         var palette = Settings.GetText(ColoursSetting);
         var details = Settings.Get(DetailsSetting, true);
         var shade = (left ? ShadeLeft : Shade).Clone();
         shade.Opacity = Math.Clamp(Number(ShadeSetting, 100), 0, 100) / 100;
         shade.Freeze();
+        var solid = Solid.Clone();
+        solid.Opacity = shade.Opacity;
+        solid.Freeze();
         var scale = Math.Clamp(Number(SizeSetting, DefaultSize), 50, 150) / 100;
-        var panel = new StackPanel { LayoutTransform = new ScaleTransform(scale, scale), Opacity = Math.Clamp(Number(OpacitySetting, 100), 20, 100) / 100 };
+        var panel = new StackPanel { LayoutTransform = new ScaleTransform(scale, scale), Opacity = Math.Clamp(Number(OpacitySetting, 100), 20, 100) / 100,
+            Orientation = style == "Strip" ? Orientation.Horizontal : Orientation.Vertical };
         foreach (var bar in list)
         {
             var grid = new Grid { HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right };
             grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new() { Width = new(bar.Label == "" ? 0 : 74) }); // values line up from bar to bar
+            grid.ColumnDefinitions.Add(new() { Width = bar.Label == "" ? new(0) : style == "Strip" ? GridLength.Auto : new(74) }); // values line up from bar to bar
             Add(grid, bar.Label, Label, 0, 0, 13);
             Add(grid, bar.Value, Paint(bar.Tone, palette), 0, bar.Label == "" ? 0 : 1, 13);
             if (details && (bar.SubLabel != "" || bar.SubValue != ""))
@@ -176,9 +186,19 @@ public sealed class Overlay : Window
                 Add(grid, bar.SubLabel, Label, 1, 0, 11.5);
                 Add(grid, bar.SubValue, Paint(bar.SubTone, palette), 1, 1, 11.5);
             }
-            panel.Children.Add(new Border
+            panel.Children.Add(style switch
             {
-                Background = shade, Width = 230, Margin = new(0, 0, 0, 8), Padding = left ? new(14, 3, 0, 4) : new(0, 3, 14, 4), Child = grid,
+                "Cards" => new Border
+                {
+                    Background = solid, CornerRadius = new(8), BorderBrush = Paint(bar.Tone, palette), BorderThickness = left ? new(3, 0, 0, 0) : new(0, 0, 3, 0),
+                    Width = 200, Margin = new(0, 0, 0, 6), Padding = new(12, 4, 12, 5), Child = grid,
+                },
+                "Minimal" => new Border { Margin = new(0, 0, 0, 4), Padding = new(8, 0, 8, 0), Effect = Outline, Child = grid },
+                "Strip" => new Border { Background = solid, Margin = new(0, 0, 2, 0), Padding = new(10, 3, 12, 4), Child = grid },
+                _ => new Border
+                {
+                    Background = shade, Width = 230, Margin = new(0, 0, 0, 8), Padding = left ? new(14, 3, 0, 4) : new(0, 3, 14, 4), Child = grid,
+                },
             });
         }
         return panel;
@@ -211,7 +231,7 @@ public sealed class Overlay : Window
         _ => Label,
     };
     static Brush Frozen(byte r, byte g, byte b) => Freeze(new SolidColorBrush(Color.FromRgb(r, g, b)));
-    static Brush Freeze(Brush brush) { brush.Freeze(); return brush; }
+    static T Freeze<T>(T thing) where T : Freezable { thing.Freeze(); return thing; }
     static LinearGradientBrush Fade(double angle)
     {
         var brush = new LinearGradientBrush(
