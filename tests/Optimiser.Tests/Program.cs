@@ -832,6 +832,9 @@ Check(Report.Lines(DateTime.Now, [], [], [], [], [])[0].StartsWith("Nothing"), "
           && Overlay.Layout(all, null).Count == all.Count, "overlay ping bar and layout presets");
     Check(Overlay.Layout(all, "Compact", ["Ping", "Warnings"]).Select(b => b.Label).SequenceEqual(["FPS", "1% low", "GPU temp"])
           && Overlay.Layout(all, null, ["CPU"]).Count == all.Count - 1, "unticked stats are left off the overlay");
+    Settings.SetText(Overlay.SideSetting, "Middle");
+    Check(Overlay.Corner() == "Top middle", "overlay position reads back");
+    Settings.SetText(Overlay.SideSetting, null);
     Settings.SetText(Overlay.SizeSetting, "95");
     Check(Overlay.Number(Overlay.SizeSetting, Overlay.DefaultSize) == 95 && Overlay.Number(Overlay.EdgeSetting, Overlay.DefaultEdge) == 14,
           "overlay look numbers read back, with defaults when unset");

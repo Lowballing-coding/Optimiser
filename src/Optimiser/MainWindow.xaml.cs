@@ -680,7 +680,8 @@ public partial class MainWindow : Window
             ("Layout", Picker(Overlay.LayoutSetting, Overlay.Layouts, "Overlay layout")),
             ("Stats", chips),
             ("Second lines", details),
-            ("Position", Picker(Overlay.CornerSetting, Overlay.Corners, "Overlay position")),
+            ("Position", Picker(Overlay.RowSetting, Overlay.Rows, "Overlay position")),
+            ("Side", Picker(Overlay.SideSetting, Overlay.Sides, "Overlay side")),
             ("Colours", Picker(Overlay.ColoursSetting, Overlay.Palettes, "Overlay colours")),
             ("Size", Range("Size", Overlay.SizeSetting, 50, 150, 5, Overlay.DefaultSize, "%")),
             ("Background", Range("Background", Overlay.ShadeSetting, 0, 100, 5, 100, "%")),
@@ -697,7 +698,7 @@ public partial class MainWindow : Window
 
     void ShowOverlayPreview()
     {
-        var corner = Optimiser.Settings.GetText(Overlay.CornerSetting) ?? Overlay.Corners[0];
+        var corner = Overlay.Corner();
         var bars = Overlay.Build(Overlay.Layout(Overlay.SampleBars(), Optimiser.Settings.GetText(Overlay.LayoutSetting), Optimiser.Settings.GetList(Overlay.HiddenSetting)));
         bars.Margin = new(0, 10, 0, 2);
         OverlayPreview.Child = new Viewbox // a wide Strip shrinks to fit the preview

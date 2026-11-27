@@ -36,12 +36,15 @@ public sealed class Overlay : Window
 
     // How it looks, set on the Stats page. Numbers are saved as text; anything unset is the look it shipped with.
     public const string SizeSetting = "OverlaySize", ShadeSetting = "OverlayShade", OpacitySetting = "OverlayOpacity", EdgeSetting = "OverlayEdge",
-        CornerSetting = "OverlayCorner", StyleSetting = "OverlayStyle", ColoursSetting = "OverlayColours", DetailsSetting = "OverlayDetails", HiddenSetting = "OverlayHidden";
+        RowSetting = "OverlayRow", SideSetting = "OverlaySide", StyleSetting = "OverlayStyle", ColoursSetting = "OverlayColours", DetailsSetting = "OverlayDetails", HiddenSetting = "OverlayHidden";
     public static readonly string[] Styles = ["Bars", "Cards", "Minimal", "Strip"];
-    public static readonly string[] Corners = ["Top right", "Top left", "Top middle", "Bottom right", "Bottom left"], Palettes = ["Standard", "Colour-blind", "White"],
+    public static readonly string[] Rows = ["Top", "Bottom"], Sides = ["Right", "Middle", "Left"], Palettes = ["Standard", "Colour-blind", "White"],
         StatNames = ["FPS", "1% low", "CPU", "GPU", "GPU temp", "Ping", "Warnings"];
-    public static readonly string[] LookSettings = [StyleSetting, SizeSetting, ShadeSetting, OpacitySetting, EdgeSetting, CornerSetting, ColoursSetting, DetailsSetting, HiddenSetting];
+    public static readonly string[] LookSettings = [StyleSetting, SizeSetting, ShadeSetting, OpacitySetting, EdgeSetting, RowSetting, SideSetting, ColoursSetting, DetailsSetting, HiddenSetting];
     public const double DefaultSize = 80, DefaultEdge = 14; // 80%: Peter found the first size too big (2026-11-27)
+
+    // Where it sits, as "Top right", "Bottom middle" and so on.
+    public static string Corner() => $"{Settings.GetText(RowSetting) ?? Rows[0]} {(Settings.GetText(SideSetting) ?? Sides[0]).ToLowerInvariant()}";
 
     public static double Number(string setting, double fallback) =>
         double.TryParse(Settings.GetText(setting), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : fallback;
@@ -160,7 +163,7 @@ public sealed class Overlay : Window
     public static StackPanel Build(List<Bar> list, string? style = null)
     {
         style ??= Settings.GetText(StyleSetting) ?? Styles[0];
-        var left = Settings.GetText(CornerSetting)?.EndsWith("left") == true;
+        var left = Corner().EndsWith("left");
         var palette = Settings.GetText(ColoursSetting);
         var details = Settings.Get(DetailsSetting, true);
         var shade = (left ? ShadeLeft : Shade).Clone();
@@ -247,7 +250,7 @@ public sealed class Overlay : Window
         UpdateLayout();
         var screen = System.Windows.Forms.Screen.FromHandle(game).Bounds;
         var dpi = VisualTreeHelper.GetDpi(this);
-        var corner = Settings.GetText(CornerSetting) ?? Corners[0];
+        var corner = Corner();
         int width = (int)Math.Ceiling(ActualWidth * dpi.DpiScaleX), height = (int)Math.Ceiling(ActualHeight * dpi.DpiScaleY),
             gap = (int)(Math.Clamp(Number(EdgeSetting, DefaultEdge), 0, 200) * dpi.DpiScaleY);
         SetWindowPos(new WindowInteropHelper(this).Handle, TopmostWindow, corner.EndsWith("left") ? screen.Left : corner.EndsWith("middle") ? screen.Left + (screen.Width - width) / 2 : screen.Right - width,
