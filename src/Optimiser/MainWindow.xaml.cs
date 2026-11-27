@@ -149,7 +149,7 @@ public partial class MainWindow : Window
         ShowUpdate(null);
         statsTimer.Tick += (_, _) => ShowStats();
         OverlaySwitch.IsChecked = Optimiser.Settings.Get(Overlay.Setting, false);
-        LayoutPicker.Content = OverlayLayouts();
+        ShowOverlayLook();
         PingHost.Text = Optimiser.Settings.GetText(Network.HostSetting) ?? "";
         ShowBenchmarks();
         statsTimer.Start();
@@ -653,19 +653,99 @@ public partial class MainWindow : Window
         ShowFps(Fps.Now());
     }
 
-    // The in-game overlay's layout presets, as a segmented picker like the gaming profile's.
-    FrameworkElement OverlayLayouts()
+    // The overlay's look on the Stats page. Each control saves straight away; the preview follows now and the overlay at
+    // its next second.
+    void ShowOverlayLook()
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
-        var saved = Optimiser.Settings.GetText(Overlay.LayoutSetting) ?? Overlay.Layouts[0];
-        foreach (var layout in Overlay.Layouts)
+        var hidden = Optimiser.Settings.GetList(Overlay.HiddenSetting);
+        var chips = new WrapPanel { Margin = new(0, 0, 0, -8) }; // cancels the last row's chip gap
+        foreach (var stat in Overlay.StatNames)
         {
-            var button = new RadioButton { Content = layout, GroupName = "OverlayLayout", IsChecked = layout == saved, Style = (Style)FindResource("Segment") };
-            System.Windows.Automation.AutomationProperties.SetName(button, $"Overlay layout: {layout}");
-            button.Click += (_, _) => Optimiser.Settings.SetText(Overlay.LayoutSetting, layout);
+            var chip = new CheckBox { Content = stat, IsChecked = !hidden.Contains(stat), Style = (Style)FindResource("Chip") };
+            System.Windows.Automation.AutomationProperties.SetName(chip, $"Show {stat} on the overlay");
+            chip.Click += (_, _) =>
+            {
+                Optimiser.Settings.SetList(Overlay.HiddenSetting, [.. chips.Children.OfType<CheckBox>().Where(c => c.IsChecked != true).Select(c => (string)c.Content)]);
+                ShowOverlayPreview();
+            };
+            chips.Children.Add(chip);
+        }
+        var details = new CheckBox { Style = (Style)FindResource("Switch"), IsChecked = Optimiser.Settings.Get(Overlay.DetailsSetting, true), HorizontalAlignment = HorizontalAlignment.Left };
+        System.Windows.Automation.AutomationProperties.SetName(details, "Show second lines on the overlay");
+        details.Click += (_, _) => { Optimiser.Settings.Set(Overlay.DetailsSetting, details.IsChecked == true); ShowOverlayPreview(); };
+        OverlayLook.Children.Clear();
+        foreach (var (name, control) in new (string, FrameworkElement)[]
+        {
+            ("Style", Picker(Overlay.StyleSetting, Overlay.Styles, "Overlay style")),
+            ("Layout", Picker(Overlay.LayoutSetting, Overlay.Layouts, "Overlay layout")),
+            ("Stats", chips),
+            ("Second lines", details),
+            ("Position", Picker(Overlay.RowSetting, Overlay.Rows, "Overlay position")),
+            ("Side", Picker(Overlay.SideSetting, Overlay.Sides, "Overlay side")),
+            ("Colours", Picker(Overlay.ColoursSetting, Overlay.Palettes, "Overlay colours")),
+            ("Size", Range("Size", Overlay.SizeSetting, 50, 150, 5, Overlay.DefaultSize, "%")),
+            ("Background", Range("Background", Overlay.ShadeSetting, 0, 100, 5, 100, "%")),
+            ("Opacity", Range("Opacity", Overlay.OpacitySetting, 20, 100, 5, 100, "%")),
+            ("Gap from edge", Range("Gap from the top or bottom", Overlay.EdgeSetting, 0, 200, 2, Overlay.DefaultEdge, " px")),
+        })
+        {
+            var label = new TextBlock { Text = name, Width = 120, VerticalAlignment = VerticalAlignment.Center, Style = (Style)FindResource("MutedText"), FontSize = 13 };
+            DockPanel.SetDock(label, Dock.Left);
+            OverlayLook.Children.Add(new DockPanel { Margin = new(0, 0, 0, 12), Children = { label, control } });
+        }
+        ShowOverlayPreview();
+    }
+
+    void ShowOverlayPreview()
+    {
+        var corner = Overlay.Corner();
+        var bars = Overlay.Build(Overlay.Layout(Overlay.SampleBars(), Optimiser.Settings.GetText(Overlay.LayoutSetting), Optimiser.Settings.GetList(Overlay.HiddenSetting)));
+        bars.Margin = new(0, 10, 0, 2);
+        OverlayPreview.Child = new Viewbox // a wide Strip shrinks to fit the preview
+        {
+            StretchDirection = StretchDirection.DownOnly, Child = bars,
+            HorizontalAlignment = corner.EndsWith("left") ? HorizontalAlignment.Left : corner.EndsWith("middle") ? HorizontalAlignment.Center : HorizontalAlignment.Right,
+            VerticalAlignment = corner.StartsWith("Bottom") ? VerticalAlignment.Bottom : VerticalAlignment.Top,
+        };
+    }
+
+    void OnOverlayReset(object sender, RoutedEventArgs e)
+    {
+        foreach (var setting in Overlay.LookSettings.Append(Overlay.LayoutSetting)) Optimiser.Settings.SetText(setting, null);
+        ShowOverlayLook();
+    }
+
+    // A segmented picker that saves its choice as text, like the gaming profile's.
+    FrameworkElement Picker(string setting, string[] options, string name)
+    {
+        var row = new WrapPanel();
+        var saved = Optimiser.Settings.GetText(setting) ?? options[0];
+        foreach (var option in options)
+        {
+            var button = new RadioButton { Content = option, GroupName = setting, IsChecked = option == saved, Style = (Style)FindResource("Segment") };
+            System.Windows.Automation.AutomationProperties.SetName(button, $"{name}: {option}");
+            button.Click += (_, _) => { Optimiser.Settings.SetText(setting, option); ShowOverlayPreview(); };
             row.Children.Add(button);
         }
-        return new Border { Style = (Style)FindResource("SegmentBox"), Child = row };
+        return new Border { Style = (Style)FindResource("SegmentBox"), Child = row, HorizontalAlignment = HorizontalAlignment.Left };
+    }
+
+    // A slider with its value beside it, saved as text.
+    FrameworkElement Range(string name, string setting, double min, double max, double step, double fallback, string unit)
+    {
+        var value = new TextBlock { Width = 60, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("Accent") };
+        var slider = new Slider { Minimum = min, Maximum = max, TickFrequency = step, SmallChange = step, LargeChange = step * 2, Value = Math.Clamp(Overlay.Number(setting, fallback), min, max),
+            Style = (Style)FindResource("Range"), Margin = new(0), VerticalAlignment = VerticalAlignment.Center, MaxWidth = 320 };
+        System.Windows.Automation.AutomationProperties.SetName(slider, $"Overlay {name.ToLowerInvariant()}");
+        value.Text = $"{slider.Value:0}{unit}";
+        slider.ValueChanged += (_, _) =>
+        {
+            value.Text = $"{slider.Value:0}{unit}";
+            Optimiser.Settings.SetText(setting, slider.Value.ToString(CultureInfo.InvariantCulture));
+            ShowOverlayPreview();
+        };
+        DockPanel.SetDock(value, Dock.Right);
+        return new DockPanel { Children = { value, slider } };
     }
 
     bool pickingKey;
@@ -675,7 +755,7 @@ public partial class MainWindow : Window
         var name = OverlayKey.Name(OverlayKey.Current);
         HotkeyButton.Content = name;
         HotkeyText.Text = registered
-            ? $"{name} shows or hides the overlay from inside a game. Full shows everything, Compact just FPS, the 1% low, GPU temperature and ping."
+            ? $"{name} shows or hides the overlay from inside a game. Changes show in the preview straight away and over the game within a second."
             : $"Another program already uses {name}, so it doesn't show or hide the overlay. Press the button to pick other keys.";
     }
 
@@ -1196,6 +1276,11 @@ public partial class MainWindow : Window
         await Task.Delay(250);
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
         SavePicture(overlay, "In-game overlay");
+        StackPanel Look(string style) { var p = Overlay.Build(Overlay.SampleBars(), style); p.Margin = new(12); p.VerticalAlignment = VerticalAlignment.Top; return p; }
+        overlay.Content = new StackPanel { Children = { new StackPanel { Orientation = Orientation.Horizontal, Children = { Look("Bars"), Look("Cards"), Look("Minimal") } }, Look("Strip") } };
+        await Task.Delay(250);
+        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+        SavePicture(overlay, "Overlay styles");
         overlay.Close();
         ((RadioButton)Nav.Children[1]).IsChecked = true;
         var sample = SetCandidates.ToList();
