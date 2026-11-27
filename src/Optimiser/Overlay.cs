@@ -38,6 +38,7 @@ public sealed class Overlay : Window
         (Left, Top) = (-10000, -10000); // placed in pixels once it has a size
         FontFamily = (FontFamily)Application.Current.Resources["Ui"];
         Content = bars;
+        bars.LayoutTransform = new ScaleTransform(0.8, 0.8); // 20% smaller than the original design, Peter 2026-11-27
         DpiChanged += (_, _) => Place(GetForegroundWindow()); // moving onto a screen with other scaling resizes it, so place it again
         SourceInitialized += (_, _) =>
         {
